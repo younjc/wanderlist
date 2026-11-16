@@ -1,0 +1,2393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wanderlist – travel wishlist map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --bg:#faf8f5; --panel:#ffffff; --ink:#1f2328; --muted:#6b7280; --line:#e7e2db;
+    --accent:#e4572e; --want:#e4572e; --planned:#e9a100; --visited:#2a9d8f; --route:#2563eb;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html,body{height:100%;margin:0}
+  body{display:flex;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg)}
+  aside{width:390px;max-width:100%;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--line);z-index:1000;min-height:0}
+  #map{flex:1;min-width:0}
+  header{padding:16px 16px 10px}
+  header h1{margin:0;font-size:20px;letter-spacing:-.01em}
+  header p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+  .tabs{display:flex;gap:6px;padding:0 16px 10px}
+  .tabs button{flex:1;padding:8px;border-radius:8px}
+  .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .pane{flex:1;display:flex;flex-direction:column;min-height:0}
+  .search{position:relative;padding:0 16px 10px}
+  .search form{display:flex;gap:6px}
+  input[type=text],input[type=number],input[type=date],input[type=time],select,textarea{font:inherit;color:inherit;border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px 10px}
+  input:focus,select:focus,textarea:focus{outline:2px solid #e4572e55;border-color:var(--accent)}
+  .search input{flex:1;min-width:0}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 11px;color:inherit}
+  button:hover{background:#f4f1ec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#cf4a24}
+  .results{margin:8px 0 0;padding:0;list-style:none;border:1px solid var(--line);border-radius:8px;max-height:230px;overflow:auto;display:none;background:#fff}
+  .results li{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+  .results li:last-child{border-bottom:0}
+  .results li:hover{background:#faf5ef}
+  .results .t{flex:1;min-width:0}
+  .results b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .results small{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .results .msg{color:var(--muted);cursor:default;display:block}
+  .tools{padding:0 16px 8px;display:flex;flex-direction:column;gap:8px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{border-radius:999px;padding:4px 10px;font-size:12.5px}
+  .chip.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  #list{flex:1;overflow:auto;padding:4px 12px 12px}
+  .empty{color:var(--muted);text-align:center;padding:28px 18px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:#fff;cursor:pointer}
+  .card:hover{border-color:#d3cabe}
+  .card.active{border-color:var(--accent);box-shadow:0 0 0 2px #e4572e33}
+  .card .top{display:flex;align-items:center;gap:8px}
+  .card h3{margin:0;font-size:14.5px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .x{border:0;background:none;color:var(--muted);padding:2px 6px;font-size:15px}
+  .x:hover{color:#b00020;background:none}
+  .tripbtn{font-size:12px;padding:2px 9px;border-radius:999px;white-space:nowrap}
+  .tripbtn.on{background:#e8f4f2;border-color:var(--visited);color:#1f6f64}
+  .addr{margin:2px 0 8px;color:var(--muted);font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card select{padding:4px 8px;font-size:12.5px;margin-bottom:6px}
+  .card textarea{width:100%;min-height:44px;resize:vertical;font-size:13px}
+  footer{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  footer .sp{flex:1}
+  footer button{font-size:12.5px;padding:5px 9px}
+
+  /* trip planner */
+  #tripBody{flex:1;overflow:auto;padding:0 14px 14px}
+  .sect{margin:0 0 14px}
+  .sect > .h{display:block;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 5px}
+  .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .row.tight button,.row.tight select{font-size:12.5px;padding:5px 9px}
+  .hint{color:var(--muted);font-size:12.5px;padding:2px 0}
+  .startcur{border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:flex;gap:10px;align-items:flex-start;background:#fff;margin-bottom:8px}
+  .node{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:#fff;cursor:pointer}
+  .node:hover{border-color:#d3cabe}
+  .badge{width:24px;height:24px;border-radius:50%;background:#1f2328;color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px}
+  .badge.s{background:var(--visited)}
+  .nb{flex:1;min-width:0}
+  .nb .top{display:flex;gap:6px;align-items:center}
+  .nb b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nb small{color:var(--muted);display:block}
+  .mv{display:flex;gap:3px}
+  .mv button{padding:0 6px;font-size:11px;border-radius:6px;line-height:20px}
+  .mv button:disabled{opacity:.35;cursor:default}
+  .leg{margin:0 0 0 11px;padding:6px 0 6px 20px;border-left:2px dashed #b9c4d6;color:#2b4f8f;font-size:12.5px;min-height:30px}
+  .leg.warn{color:#b45309}
+  .leg.bad{color:#6b7280}
+  .stay{margin-top:5px;font-size:12.5px;color:var(--muted);display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .stay input{width:62px;padding:3px 6px}
+  .stay select{padding:3px 6px}
+  .summary{background:#f3f7ff;border:1px solid #d6e2fb;border-radius:12px;padding:10px 12px}
+  .summary .big{font-size:16px;font-weight:700}
+  .summary small{display:block;color:#475569;margin-top:2px}
+  .summary .warnline{color:#b45309;margin-top:6px;font-size:12.5px}
+
+  details.sect > summary{display:block}
+  .ev-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;margin-top:8px;font-size:13px}
+  .ev-grid > label{color:var(--muted)}
+  .ev-grid input[type=number]{width:80px;padding:4px 8px}
+  .ev-grid input[type=range]{width:100%}
+  .bt{font-size:11.5px;background:#eaf6ee;color:#1f6f3a;border-radius:999px;padding:0 7px;margin-left:5px;white-space:nowrap}
+  .bt.low{background:#fff1e0;color:#b45309}
+  .bt.bad{background:#fde8e8;color:#b00020}
+  .chg{margin-top:5px;padding:5px 8px;background:#fff8e6;border:1px solid #f3dca0;border-radius:8px;color:#7a5200;font-size:12.5px;cursor:pointer;line-height:1.35}
+  .chg:hover{background:#fff2cc}
+  .chgl{display:inline-flex;gap:4px;align-items:center;white-space:nowrap}
+  .stay .chgl{flex-basis:100%}
+  .homebox{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:#fff;margin-bottom:6px}
+  .num.zap{background:#f59e0b;font-size:15px}
+
+  .wxstrip{display:flex;gap:6px;overflow-x:auto;padding:6px 0 4px}
+  .wxday{flex:0 0 auto;min-width:78px;text-align:center;border:1px solid var(--line);border-radius:10px;padding:6px 4px;background:#fff;font-size:12px;line-height:1.35}
+  .wxday.trip{border-color:var(--route);background:#f3f7ff}
+  .wxday.warn{border-color:#f0b27a;background:#fff6ec}
+  .wxday .ic{font-size:22px;line-height:1.2}
+  .wxday .hi{font-weight:700}
+  .wxday .lo{color:var(--muted)}
+  .wxday .r{color:#2563eb}
+  .nb small.wxl{color:#334155;margin-top:2px}
+  .nb small.wxl.bad{color:#9b1c1c;font-weight:600}
+
+  .dayhdr{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0 6px;padding:7px 10px;background:#1f2328;color:#fff;border-radius:10px;font-size:13px}
+  .dayhdr:first-child{margin-top:0}
+  .dayhdr .dsum{font-size:11.5px;opacity:.85}
+  .dayhdr .dh2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .dayhdr .dstart{font-size:11.5px;display:flex;align-items:center;gap:4px}
+  .dayhdr input[type=time]{padding:1px 4px;font-size:12px;border-radius:6px;color:#1f2328}
+  .dayhdr .x{color:#fff;opacity:.7}
+  .dayadd{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+  .dayadd button{font-size:12px;padding:3px 9px;border-radius:999px}
+  .stay input[type=time]{width:100px;padding:2px 6px}
+  .stay .chip{font-size:11.5px}
+  .node.k-sleep{background:#f6f5ff}
+  .costl input{width:78px;padding:2px 6px}
+  .costbox table{width:100%;border-collapse:collapse;font-size:13px}
+  .costbox td{padding:3px 2px;border-bottom:1px solid var(--line)}
+  .costbox td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+  .costbox tr.tot td{font-weight:700;border-bottom:0;padding-top:6px}
+  .costbox .sub td{color:var(--muted,#6b7280);font-size:12px}
+  .node.k-charge{background:#fff3f3}
+  .node.k-note{background:#fffbe6}
+  .node.rich{display:block;padding:0;overflow:hidden;cursor:default;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .node.rich .nb{padding:8px 12px 10px}
+  .nhead{display:flex;align-items:center;gap:8px;padding:10px 12px 0}
+  .nhead .badge{margin:0}
+  .ntitle{flex:1;min-width:0;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hero{position:relative;height:132px;background:#d9dde3}
+  .heroimg{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+  .hgrad{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.38) 0%,rgba(0,0,0,0) 42%,rgba(0,0,0,.72) 100%);pointer-events:none}
+  .hbadge{position:absolute;top:9px;left:10px;pointer-events:none}
+  .hbadge .badge{box-shadow:0 0 0 2px rgba(255,255,255,.9)}
+  .hmv{position:absolute;top:8px;right:8px}
+  .hmv button{background:rgba(255,255,255,.92);border:0;color:#1f2328}
+  .htitle{position:absolute;left:12px;right:12px;bottom:9px;color:#fff;font-size:17px;font-weight:700;line-height:1.2;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .meta{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px;color:#4b5563}
+  .meta b{color:#1f2328;font-weight:600}
+  .fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 8px;margin-top:10px}
+  .fld{display:flex;flex-direction:column;gap:2px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;font-weight:600;min-width:0}
+  .fields .fld input,.fields .fld select{width:100%;box-sizing:border-box;padding:5px 6px;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;color:#1f2328}
+  .nfoot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;flex-wrap:wrap}
+  .nfoot .chgl{display:flex;align-items:center;gap:5px;color:#374151}
+  .cardhero{display:block;width:calc(100% + 24px);margin:-10px -12px 8px;height:112px;object-fit:cover;border-radius:12px 12px 0 0;cursor:zoom-in}
+  .ph .cov{position:absolute;top:auto;right:auto;bottom:-5px;left:-5px;width:18px;height:18px;border-radius:50%;border:0;background:#f59e0b;color:#fff;font-size:10px;line-height:18px;padding:0;cursor:pointer}
+  .photos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
+  .ph{position:relative;display:inline-block}
+  .ph img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;display:block}
+  .ph button{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:0;background:#1f2328;color:#fff;font-size:10px;line-height:18px;padding:0;cursor:pointer}
+  #lightbox{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out}
+  #lightbox img{max-width:94vw;max-height:94vh;border-radius:8px}
+  .memo textarea{width:100%;box-sizing:border-box;margin-top:6px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;resize:vertical;background:#fff}
+  .memo{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+  .memo textarea{flex:1 1 100%;margin-top:0}
+  .memo .mlinks{flex:1 1 100%;margin-top:0}
+  .memo .photos{margin-top:0}
+  .memo .chip{margin-top:0}
+  .mlinks{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .mlinks a{font-size:12px;padding:2px 9px;border-radius:999px;background:#eef4ff;color:#1d4ed8;text-decoration:none;border:1px solid #cfe0ff;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mlinks a:hover{background:#dbe8ff}
+  .node.k-note textarea{width:100%;box-sizing:border-box;margin-top:4px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;resize:vertical;background:#fff}
+  .node.k-lunch,.node.k-dinner{background:#fff9ef}
+
+  #chgBody{flex:1;overflow:auto;padding:0 14px 14px}
+  .chgrow{display:flex;gap:8px;align-items:flex-start;padding:9px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+  .chgrow:hover{background:#f6f7f9}
+  .chgrow .ic{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:13px;color:#fff;background:#6b7280}
+  .chgrow.tesla .ic{background:#dc2626}
+  .chgrow.fast .ic{background:#2563eb}
+  .chgrow.dest .ic{background:#7c3aed}
+  .chgrow .nb{flex:1;min-width:0}
+  .chgrow .nb b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chgrow small{color:var(--muted,#6b7280);font-size:12px}
+  .chgrow .acts{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap}
+  .chgrow .acts button,.chgrow .acts a{font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#fff;color:inherit;text-decoration:none;cursor:pointer}
+
+  /* map pins */
+  .pin{display:block;width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 6px #0004;position:relative}
+  .pin::after{content:"";position:absolute;inset:6px;background:#fff;border-radius:50%}
+  .num{display:flex;width:28px;height:28px;border-radius:50%;color:#fff;font:700 13px system-ui,sans-serif;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px #0006}
+  .leaflet-div-icon{background:none;border:0}
+  .popadd{margin-top:8px;width:100%}
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 14px;border-radius:10px;display:none;z-index:3000;align-items:center;gap:12px;max-width:90vw}
+  #toast button{background:none;border:0;color:#ffb89f;padding:0;text-decoration:underline}
+  @media (max-width:760px){
+    body{flex-direction:column-reverse}
+    aside{width:100%;height:52vh;border-right:0;border-top:1px solid var(--line)}
+    #map{height:48vh;flex:none}
+  }
+</style>
+</head>
+<body>
+<aside>
+  <header>
+    <h1>🧭 Wanderlist</h1>
+    <p><span id="count">0</span> places saved · click the map to drop a pin</p>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="wish" class="on">📍 Wishlist</button>
+    <button data-tab="trip">🚗 Trip<span id="tripCount"></span></button>
+    <button data-tab="chg">⚡ Chargers</button>
+  </nav>
+
+  <!-- ===== Wishlist ===== -->
+  <section id="paneWish" class="pane">
+    <div class="search">
+      <form id="searchForm">
+        <input type="text" id="q" placeholder="Search a city, landmark, restaurant…" autocomplete="off">
+        <button class="primary" type="submit">Search</button>
+      </form>
+      <ul id="results" class="results"></ul>
+    </div>
+    <div class="tools">
+      <div class="chips" id="chips"></div>
+      <input type="text" id="filterText" placeholder="Filter your list…">
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <!-- ===== Charger finder ===== -->
+  <section id="paneChg" class="pane" hidden>
+    <div id="chgBody">
+      <div class="sect">
+        <span class="h">Find chargers near…</span>
+        <div id="chgPicker"></div>
+        <div class="row tight" style="margin-top:6px"><button id="chgView" type="button">🗺️ Current map view</button><button id="chgHome" type="button">🏠 Home</button></div>
+      </div>
+      <div class="sect">
+        <div class="row tight">
+          <select id="chgType"><option value="tesla">⚡ Tesla Superchargers (live map data)</option><option value="sc">⚡ Tesla Superchargers (built-in NZ list)</option><option value="dc">Tesla + other fast (DC)</option><option value="dest">🏨 Tesla destination (NZ hotels, slow)</option><option value="all">All chargers (incl. slow AC)</option></select>
+          <select id="chgRad"><option value="10">within 10 km</option><option value="25" selected>within 25 km</option><option value="50">within 50 km</option><option value="100">within 100 km</option></select>
+          <select id="chgKw"><option value="0">any power</option><option value="50">50+ kW</option><option value="150">150+ kW</option><option value="250">250+ kW</option></select>
+        </div>
+        <div class="hint" style="margin-top:4px">Data is from OpenStreetMap, so stall counts and power are sometimes missing (chargers with unknown power are never hidden by the power filter). Check availability in the Tesla app or PlugShare before relying on a charger.</div>
+      </div>
+      <div id="chgStatus" class="hint"></div>
+      <div id="chgList"></div>
+    </div>
+  </section>
+
+  <!-- ===== Trip planner ===== -->
+  <section id="paneTrip" class="pane" hidden>
+    <div id="tripBody">
+      <div class="sect">
+        <span class="h">🏠 Home</span>
+        <div id="homeBox"></div>
+        <details id="homeDetails"><summary class="hint" style="cursor:pointer">Set or change home address</summary>
+          <div id="homePicker" style="margin-top:6px"></div></details>
+      </div>
+
+      <div class="sect">
+        <span class="h">Start point</span>
+        <div id="startBox"></div>
+        <div id="startPicker"></div>
+      </div>
+
+      <details class="sect" id="carBox">
+        <summary class="h" style="cursor:pointer">🔋 Car &amp; battery <span id="carSummary" style="text-transform:none;letter-spacing:0;font-weight:400"></span></summary>
+        <div class="ev-grid">
+          <label for="carModel">Model</label><select id="carModel"></select>
+          <label for="carRange">Rated range</label><span class="row"><input type="number" id="carRange" min="0" step="5"> <span id="carUnit">km</span></span>
+          <label for="carFactor">Real-world</label><span class="row" style="flex-wrap:nowrap"><input type="range" id="carFactor" min="50" max="100" step="5"><b id="carFactorV" style="min-width:40px"></b></span>
+          <label for="startPct">Start battery</label><span class="row" style="flex-wrap:nowrap"><input type="range" id="startPct" min="5" max="100" step="1"><b id="startPctV" style="min-width:40px"></b></span>
+          <label for="reservePct">Arrive with ≥</label><span class="row"><input type="number" id="reservePct" min="0" max="50"> %</span>
+          <label for="chargeTo">Charge up to</label><span class="row"><input type="number" id="chargeTo" min="50" max="100"> %</span>
+        </div>
+        <label class="row" style="margin-top:8px;font-size:13px"><input type="checkbox" id="inclDC"> Also use other DC fast chargers (CCS)</label>
+        <div class="hint" style="margin-top:6px">Rated range = what your car shows at 100%. “Real-world” covers highway speed, weather and hills. Model presets are rough, so edit the range to match your car.</div>
+      </details>
+
+      <div class="sect">
+        <span class="h">When &amp; how</span>
+        <div class="row">
+          <input type="date" id="tDate">
+          <input type="time" id="tTime">
+          <select id="tUnits"><option value="km">km</option><option value="mi">miles</option></select>
+        </div>
+        <div class="hint" style="margin-top:4px">Day 1 is this date. Each day starts at this time unless you change it in that day’s header.</div>
+        <div class="row" style="margin-top:6px;font-size:13px">Trip ends: <select id="tEnd" style="flex:1;min-width:0"></select></div>
+      </div>
+
+      <div class="sect" id="wxSect">
+        <span class="h">🌤 Weather forecast</span>
+        <select id="wxLoc" style="width:100%"></select>
+        <div id="wxStrip" class="wxstrip"></div>
+        <div id="wxNote" class="hint"></div>
+      </div>
+
+      <div class="sect">
+        <span class="h">Itinerary</span>
+        <div id="stops"></div>
+        <div class="row tight" style="margin-top:10px"><button id="addDay" type="button">＋ Add day</button></div>
+        <div id="homeRow" style="margin-top:8px"></div>
+
+        <details id="stopDetails" open style="margin-top:12px"><summary class="hint" style="cursor:pointer;font-weight:600">＋ Add to itinerary</summary>
+          <div id="fillNote" class="hint" hidden style="background:#fff4d6;padding:6px 8px;border-radius:8px;margin-top:8px"></div>
+          <div class="row tight" style="margin:8px 0 6px">
+            <select id="stopDay"></select>
+            <select id="stopKind"><option value="visit">📍 Place</option><option value="lunch">🍽️ Lunch</option><option value="dinner">🍽️ Dinner</option><option value="charge">🔌 Charge</option><option value="sleep">🛏️ Sleep</option></select>
+            <label style="font-size:12.5px;display:flex;align-items:center;gap:4px">at <input type="time" id="stopAt" style="width:100px;padding:3px 6px"></label>
+          </div>
+          <div class="row tight">
+            <select id="addStopSel" style="flex:1;min-width:0"></select>
+            <button id="addAll" type="button">Add all</button>
+          </div>
+          <div class="row tight" style="margin-top:6px"><button id="addBlank" type="button">＋ Add without a place</button><button id="samePlace" type="button">📍 Same place as the previous stop</button></div>
+          <div id="stopPicker" style="margin-top:8px"></div>
+          <label class="row" style="margin-top:6px;font-size:13px"><input type="checkbox" id="alsoWish"> Also save to my wishlist</label>
+        </details>
+      </div>
+
+      <div class="sect">
+        <div id="summary" class="summary"></div>
+        <div class="row tight" style="margin-top:8px">
+          <button id="optimize" type="button">✨ Optimize order</button>
+          <button id="gmaps" type="button">Open in Google Maps ↗</button>
+          <button id="clearTrip" type="button">Clear trip</button>
+        </div>
+      </div>
+
+      <div class="sect costbox" id="costSect">
+        <span class="h">💰 Trip cost</span>
+        <div class="row tight" style="margin:6px 0">
+          <label style="font-size:12.5px">Currency symbol <input type="text" id="costCur" maxlength="4" style="width:48px"></label>
+          <label style="font-size:12.5px">People sharing <input type="number" id="costPeople" min="1" step="1" style="width:56px"></label>
+        </div>
+        <div id="costTable"></div>
+        <div class="hint">Type a cost on any lunch, dinner, sleep, charge or place block and it’s tallied here. These are your own estimates; nothing is looked up.</div>
+      </div>
+
+      <div class="sect" id="shareSect">
+        <span class="h">📤 Share itinerary</span>
+        <input type="text" id="shTitle" placeholder="Trip title (e.g. Northland road trip)" style="width:100%;box-sizing:border-box;margin:6px 0">
+        <div class="row tight" style="font-size:12.5px">
+          <label><input type="checkbox" id="shDrive" checked> Drive times</label>
+          <label><input type="checkbox" id="shNotes" checked> Notes &amp; links</label>
+          <label><input type="checkbox" id="shCost"> Costs</label>
+          <label><input type="checkbox" id="shPhotos" checked> Photos</label>
+        </div>
+        <div class="row tight" style="margin-top:8px"><button id="shCopy" type="button" class="primary">📋 Copy as text</button><button id="shHtml" type="button">⬇ Download page</button><button id="shPrint" type="button">🖨 Print / PDF</button></div>
+        <div class="hint" style="margin-top:4px">“Copy as text” pastes cleanly into a message or email. “Download page” is a single file anyone can open in a browser; “Print / PDF” opens a printable version.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <button id="fit">Show all</button>
+    <span class="sp"></span>
+    <button id="export">Export</button>
+    <button id="import">Import</button>
+    <input type="file" id="file" accept="application/json,.json" hidden>
+    <input type="file" id="photoFile" accept="image/*" multiple hidden>
+  </footer>
+</aside>
+
+<div id="map"></div>
+<div id="toast"><span id="toastMsg"></span><button id="toastUndo">Undo</button></div>
+
+<script>
+function startApp(){
+  const STATUS = {
+    want:    {label:'Want to go', color:'#e4572e'},
+    planned: {label:'Planned',    color:'#e9a100'},
+    visited: {label:'Been there', color:'#2a9d8f'}
+  };
+  const KINDS = {
+    visit:  {icon: '📍', label: 'Place',  stay: 2,   color: '#1f2328'},
+    lunch:  {icon: '🍽️', label: 'Lunch',  stay: 1,   color: '#d97706'},
+    dinner: {icon: '🍽️', label: 'Dinner', stay: 1.5, color: '#d97706'},
+    charge: {icon: '🔌', label: 'Charge', stay: 0.5, color: '#dc2626'},
+    sleep:  {icon: '🛏️', label: 'Sleep',  stay: 0,   color: '#4f46e5'},
+    note:   {icon: '📝', label: 'Note',   stay: 0,   color: '#6b7280'}
+  };
+  const KEY = 'wanderlist.places.v1', TKEY = 'wanderlist.trip.v1', HKEY = 'wanderlist.home.v1', CKEY = 'wanderlist.car.v1';
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // ---------- photos (kept in the browser's IndexedDB; only small ids are stored in the trip/wishlist) ----------
+  const photoCache = new Map();   // id -> data URL
+  let pdb = null, photoWarned = false, photoTarget = null;
+  const openPDB = () => new Promise(res => {
+    try { const rq = indexedDB.open('wanderlist-photos', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('p'); rq.onsuccess = () => res(rq.result); rq.onerror = rq.onblocked = () => res(null); }
+    catch(e){ res(null); }
+  });
+  function photoPut(id, url){ photoCache.set(id, url); if (!pdb) return; try { pdb.transaction('p', 'readwrite').objectStore('p').put(url, id); } catch(e) {} }
+  function photoDel(id){ photoCache.delete(id); if (!pdb) return; try { pdb.transaction('p', 'readwrite').objectStore('p').delete(id); } catch(e) {} }
+  const photoRefs = () => { const r = new Set(); places.forEach(p => (p.photos || []).forEach(i => r.add(i))); trip.stops.forEach(st => (st.photos || []).forEach(i => r.add(i))); return r; };
+  async function photoLoadAll(){
+    pdb = await openPDB(); if (!pdb) return;
+    const keys = await new Promise(res => { const out = new Map(); try { const rq = pdb.transaction('p').objectStore('p').openCursor(); rq.onsuccess = () => { const c = rq.result; if (c){ out.set(c.key, c.value); c.continue(); } else res(out); }; rq.onerror = () => res(out); } catch(e){ res(out); } });
+    keys.forEach((v, k) => photoCache.set(k, v));   // never delete here: a stale or cleared list must not wipe your photos
+    render(); renderTrip();
+  }
+  function shrinkPhoto(file, max){
+    return new Promise((res, rej) => {
+      const img = new Image(), u = URL.createObjectURL(file);
+      img.onload = () => {
+        const sc = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * sc)); c.height = Math.max(1, Math.round(img.height * sc));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg', 0.78));
+      };
+      img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('unreadable')); };
+      img.src = u;
+    });
+  }
+  // A block that uses a wishlist place shares that place's photos; any other block keeps its own.
+  const photoOwner = st => st.pid ? placeById(st.pid) : st;
+  function photoStrip(o){
+    if (!o) return '';
+    return `<div class="photos">${(o.photos || []).filter(id => photoCache.has(id)).map(id => `<span class="ph"><img src="${photoCache.get(id)}" alt="" data-pid="${id}">${id !== (o.photos || []).find(x => photoCache.has(x)) ? `<button type="button" class="cov" data-act="phcover" data-pid="${id}" title="Use as the cover photo">★</button>` : ''}<button type="button" data-act="phdel" data-pid="${id}" title="Remove photo">✕</button></span>`).join('')}<button type="button" class="chip" data-act="phadd">📷 Add photo</button></div>`;
+  }
+  const todayStr = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+  // ---------- storage ----------
+  let places = [];
+  try { places = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e) { places = []; }
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(places)); } catch(e) { toast('Could not save to browser storage'); } }
+  const placeById = id => places.find(p => p.id === id);
+  const kindOf = s => (KINDS[s.kind] ? s.kind : 'visit');
+  const stopPlace = s => s.place ? s.place : placeById(s.pid);   // a stop is a wishlist place (pid) or a trip-only place
+
+  let trip = {start:null, stops:[], round:false, end:'last', alsoWish:false, title:'', cur:'$', people:1, nDays:1, dayStart:{}, startPct:80, date:'', time:'09:00', units:'km'};
+  try { const t = JSON.parse(localStorage.getItem(TKEY)); if (t && typeof t === 'object') trip = Object.assign(trip, t); } catch(e) {}
+  if (!Array.isArray(trip.stops)) trip.stops = [];
+  if (trip.round){ trip.end = 'start'; trip.round = false; }   // migrate older saves
+  trip.stops = trip.stops.filter(s => s.blank || stopPlace(s));
+  normalizeStops();
+  if (!trip.date) trip.date = todayStr();
+  function saveTrip(){ try { localStorage.setItem(TKEY, JSON.stringify(trip)); } catch(e) {} }
+  // Every stop belongs to a day (1-based) and has a kind; the list is kept sorted by day.
+  function normalizeStops(){
+    trip.stops.forEach(st => {
+      st.day = Math.max(1, parseInt(st.day) || 1); st.kind = kindOf(st); if (st.at == null) st.at = '';
+      if (st.unit === 'n'){ st.stay = (+st.stay || 1) * 24; st.unit = 'h'; }   // old "nights" -> hours
+    });
+    trip.stops.sort((a, b) => a.day - b.day);
+    trip.nDays = Math.max(1, parseInt(trip.nDays) || 1, ...trip.stops.map(st => st.day));
+    if (!trip.dayStart || typeof trip.dayStart !== 'object') trip.dayStart = {};
+  }
+
+  let home = null;
+  try { const h = JSON.parse(localStorage.getItem(HKEY)); if (h && typeof h.lat === 'number') home = h; } catch(e) {}
+  function saveHome(){ try { localStorage.setItem(HKEY, JSON.stringify(home)); } catch(e) {} }
+
+  let car = {model:'', rangeKm:0, factor:0.8, reserve:10, chargeTo:80, includeDC:false};
+  try { const c = JSON.parse(localStorage.getItem(CKEY)); if (c && typeof c === 'object') car = Object.assign(car, c); } catch(e) {}
+  function saveCar(){ try { localStorage.setItem(CKEY, JSON.stringify(car)); } catch(e) {} }
+  const carSet = () => car.rangeKm > 0;
+
+  // ---------- map ----------
+  const map = L.map('map', {zoomControl:true}).setView([20, 10], 2);
+  const esriAttr = 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, USGS, and the GIS User Community';
+  const baseLayers = {
+    'Streets (Esri)': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19, attribution: esriAttr }),
+    'OpenStreetMap': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }),
+    'Satellite (Esri)': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19, maxNativeZoom: 18, attribution: esriAttr })
+  };
+  const defaultBase = baseLayers['Streets (Esri)'];
+  defaultBase.addTo(map);
+  L.control.layers(baseLayers, null, {position: 'topright'}).addTo(map);
+  let tilesOk = false, tileErrs = 0;
+  defaultBase.on('tileload', () => { tilesOk = true; });
+  defaultBase.on('tileerror', () => {
+    if (!tilesOk && ++tileErrs === 4 && map.hasLayer(defaultBase)) {
+      map.removeLayer(defaultBase);
+      baseLayers['OpenStreetMap'].addTo(map);
+    }
+  });
+
+  const layer = L.layerGroup().addTo(map);       // wishlist pins
+  const tripLayer = L.layerGroup().addTo(map);   // route + numbered stops
+  const chgLayer = L.layerGroup();               // charger-finder results (shown on the Chargers tab only)
+  const homeLayer = L.layerGroup().addTo(map);
+  function drawHome(){
+    homeLayer.clearLayers();
+    if (!home) return;
+    L.marker([home.lat, home.lng], {
+      icon: L.divIcon({className:'', html:'<span class="num" style="background:#7c3aed;font-size:15px">🏠</span>', iconSize:[28,28], iconAnchor:[14,14], tooltipAnchor:[16,0]}),
+      zIndexOffset: 900
+    }).bindTooltip('Home: ' + home.name, {direction:'right'}).addTo(homeLayer);
+  }
+  let markers = {};
+
+  function icon(color){
+    return L.divIcon({className:'', html:`<span class="pin" style="background:${color}"></span>`, iconSize:[26,26], iconAnchor:[13,26], popupAnchor:[0,-26], tooltipAnchor:[14,-14]});
+  }
+  function numIcon(label, color){
+    return L.divIcon({className:'', html:`<span class="num" style="background:${color}">${label}</span>`, iconSize:[28,28], iconAnchor:[14,14], tooltipAnchor:[16,0]});
+  }
+
+  // ---------- wishlist state ----------
+  let filter = 'all', filterText = '', activeId = null;
+
+  function visible(){
+    const q = filterText.trim().toLowerCase();
+    return places.filter(p =>
+      (filter === 'all' || p.status === filter) &&
+      (!q || (p.name + ' ' + p.address + ' ' + p.note).toLowerCase().includes(q)));
+  }
+
+  function renderChips(){
+    const counts = {all: places.length};
+    Object.keys(STATUS).forEach(k => counts[k] = places.filter(p => p.status === k).length);
+    $('chips').innerHTML = [['all','All'], ...Object.entries(STATUS).map(([k,v]) => [k, v.label])]
+      .map(([k,l]) => `<button class="chip ${filter===k?'on':''}" data-f="${k}">${l} · ${counts[k]}</button>`).join('');
+  }
+
+  const inTrip = id => trip.stops.some(s => s.pid === id);
+
+  function card(p){
+    const s = STATUS[p.status] || STATUS.want;
+    const it = inTrip(p.id);
+    const cov = (p.photos || []).find(id => photoCache.has(id));
+    return `<article class="card ${p.id===activeId?'active':''}" data-id="${p.id}">
+      ${cov ? `<img class="cardhero" src="${photoCache.get(cov)}" alt="" data-pid="${cov}">` : ''}
+      <div class="top"><span class="dot" style="background:${s.color}"></span><h3 title="${esc(p.name)}">${esc(p.name)}</h3>
+        <button class="tripbtn ${it?'on':''}" data-act="trip" title="${it?'Remove from trip':'Add to trip'}">${it?'✓ In trip':'＋ Trip'}</button>
+        <button class="x" data-act="del" title="Remove">✕</button></div>
+      <div class="addr">${esc(p.address)}</div>
+      <select data-act="status">${Object.entries(STATUS).map(([k,v]) => `<option value="${k}" ${k===p.status?'selected':''}>${v.label}</option>`).join('')}</select>
+      <textarea data-act="note" placeholder="Notes: best time to go, things to do, who to bring…">${esc(p.note)}</textarea>
+      ${photoStrip(p)}
+    </article>`;
+  }
+
+  function render(){
+    const vis = visible();
+    $('count').textContent = places.length;
+    renderChips();
+    $('list').innerHTML = vis.length ? vis.map(card).join('') :
+      `<div class="empty">${places.length ? 'Nothing matches that filter.' : 'Your wishlist is empty.<br>Search for a place above or click anywhere on the map to drop a pin.'}</div>`;
+    layer.clearLayers(); markers = {};
+    vis.forEach(p => {
+      const s = STATUS[p.status] || STATUS.want;
+      const m = L.marker([p.lat, p.lng], {icon: icon(s.color)}).addTo(layer);
+      m.bindTooltip(p.name, {direction:'right'});
+      m.on('click', () => select(p.id, false));
+      markers[p.id] = m;
+    });
+  }
+
+  function select(id, fly = true){
+    activeId = id;
+    const p = placeById(id); if (!p) return;
+    document.querySelectorAll('.card').forEach(c => c.classList.toggle('active', c.dataset.id === id));
+    const el = document.querySelector(`.card[data-id="${id}"]`);
+    if (el) el.scrollIntoView({block:'nearest', behavior:'smooth'});
+    if (fly) map.flyTo([p.lat, p.lng], Math.max(map.getZoom(), 12), {duration:.8});
+  }
+
+  function fitAll(){
+    if (!places.length) return map.setView([20, 10], 2);
+    map.fitBounds(L.latLngBounds(places.map(p => [p.lat, p.lng])), {padding:[50,50], maxZoom:12});
+  }
+
+  // ---------- wishlist interactions ----------
+  $('list').addEventListener('click', e => {
+    const c = e.target.closest('.card'); if (!c) return;
+    const id = c.dataset.id;
+    if (e.target.closest('[data-act="del"]')) return remove(id);
+    if (e.target.closest('[data-act="trip"]')) return toggleTrip(id);
+    if (e.target.closest('select,textarea')) return;
+    select(id);
+  });
+  $('list').addEventListener('change', e => {
+    const c = e.target.closest('.card'); if (!c) return;
+    const p = placeById(c.dataset.id); if (!p) return;
+    if (e.target.dataset.act === 'status'){ p.status = e.target.value; save(); render(); }
+    if (e.target.dataset.act === 'note'){ p.note = e.target.value; save(); }
+  });
+  $('chips').addEventListener('click', e => {
+    const b = e.target.closest('[data-f]'); if (!b) return;
+    filter = b.dataset.f; render();
+  });
+  $('filterText').addEventListener('input', e => { filterText = e.target.value; render(); });
+  $('fit').onclick = () => { if (!$('paneTrip').hidden && fitTrip()) return; fitAll(); };
+
+  // ---------- add / remove ----------
+  function addPlace(p){
+    const dupe = places.find(x => Math.abs(x.lat - p.lat) < 1e-5 && Math.abs(x.lng - p.lng) < 1e-5);
+    if (dupe){ toast('Already on your list'); select(dupe.id); return dupe; }
+    const place = {id: uid(), name: p.name, address: p.address || '', lat: p.lat, lng: p.lng, status: 'want', note: '', added: Date.now()};
+    places.unshift(place); save();
+    filter = 'all'; filterText = ''; $('filterText').value = '';
+    render(); renderTrip(); select(place.id);
+    toast(`Added “${place.name}”`);
+    return place;
+  }
+
+  let lastRemoved = null;
+  function remove(id){
+    const i = places.findIndex(p => p.id === id); if (i < 0) return;
+    const ti = trip.stops.findIndex(s => s.pid === id);
+    lastRemoved = {place: places[i], index: i, tripEntry: ti >= 0 ? trip.stops[ti] : null, tripIndex: ti};
+    places.splice(i, 1); save();
+    if (ti >= 0) trip.stops.splice(ti, 1);
+    render(); refreshRoute(false);
+    toast(`Removed “${lastRemoved.place.name}”`, () => {
+      places.splice(lastRemoved.index, 0, lastRemoved.place); save();
+      if (lastRemoved.tripEntry) trip.stops.splice(lastRemoved.tripIndex, 0, lastRemoved.tripEntry);
+      render(); refreshRoute(false);
+    });
+  }
+
+  // ---------- geocoding ----------
+  async function geocode(q){
+    const errors = [];
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      return data.map(r => ({name: r.name || r.display_name.split(',')[0], address: r.display_name, lat: +r.lat, lng: +r.lon}));
+    } catch(e) { errors.push('Nominatim: ' + e.message); }
+    try {
+      const res = await fetch(`https://photon.komoot.io/api/?limit=6&q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      return (data.features || []).map(f => {
+        const p = f.properties || {};
+        const addr = [p.name, p.street, p.city || p.county, p.state, p.country].filter(Boolean).join(', ');
+        return {name: p.name || addr.split(',')[0] || q, address: addr, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]};
+      });
+    } catch(e) { errors.push('Photon: ' + e.message); }
+    throw new Error(errors.join(' | '));
+  }
+
+  async function reverseName(lat, lng){
+    try {
+      const r = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=${lat}&lon=${lng}`)).json();
+      if (r && r.display_name) return {name: r.name || r.display_name.split(',')[0], address: r.display_name};
+    } catch(e) {}
+    try {
+      const r = await (await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`)).json();
+      const pr = r.features && r.features[0] && r.features[0].properties;
+      if (pr){
+        const addr = [pr.name, pr.street, pr.city || pr.county, pr.state, pr.country].filter(Boolean).join(', ');
+        return {name: pr.name || pr.city || addr.split(',')[0], address: addr};
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function listResults(ul, found, btnLabel, onPick, preview){
+    ul.innerHTML = '';
+    found.forEach(place => {
+      const li = document.createElement('li');
+      li.innerHTML = `<div class="t"><b>${esc(place.name)}</b><small>${esc(place.address)}</small></div><button class="primary">${btnLabel}</button>`;
+      li.querySelector('button').onclick = ev => { ev.stopPropagation(); onPick(place); };
+      li.onclick = () => preview ? preview(place) : onPick(place);
+      ul.appendChild(li);
+    });
+    ul.style.display = 'block';
+  }
+  async function runSearch(q, ul, btnLabel, onPick, preview){
+    ul.innerHTML = '<li class="msg">Searching…</li>'; ul.style.display = 'block';
+    try {
+      const found = await geocode(q);
+      if (!found.length){ ul.innerHTML = '<li class="msg">No matches. Try adding a city or country.</li>'; return; }
+      listResults(ul, found, btnLabel, onPick, preview);
+    } catch(err) {
+      ul.innerHTML = `<li class="msg">Search failed:<br>${esc(err.message)}<br><br>Check your connection or try disabling ad blockers / VPN.</li>`;
+    }
+  }
+
+  // ---------- temporary pin (search result / map click) ----------
+  let temp = null, pending = null, pickHandler = null;
+  function clearTemp(){ if (temp){ map.removeLayer(temp); temp = null; } pending = null; }
+  function showTemp(p){
+    clearTemp(); pending = p;
+    temp = L.marker([p.lat, p.lng], {icon: icon('#3b82f6')}).addTo(map);
+    temp.bindPopup(`<b>${esc(p.name)}</b>${p.address ? `<br><small>${esc(p.address)}</small>` : ''}<br><button class="popadd primary" id="popAdd">＋ Add to wishlist</button><button class="popadd" id="popAddTrip">🚗 Add to trip only</button>`);
+    temp.on('popupopen', () => {
+      const b = document.getElementById('popAdd'); if (b) b.onclick = () => commitPending(false);
+      const t = document.getElementById('popAddTrip'); if (t) t.onclick = () => commitPending(true);
+    });
+    temp.openPopup();
+  }
+  async function commitPending(toTrip){
+    if (!pending) return;
+    const p = {...pending};
+    if (p.unnamed){
+      const r = await reverseName(p.lat, p.lng);
+      if (r){ p.name = r.name || p.name; p.address = r.address || p.address; }
+    }
+    clearTemp(); map.closePopup();
+    if (toTrip){ addTripStop(p, false); return; }
+    addPlace(p);
+  }
+  map.on('click', async e => {
+    if (pickHandler){
+      const h = pickHandler; pickHandler = null; map.getContainer().style.cursor = '';
+      const r = await reverseName(e.latlng.lat, e.latlng.lng);
+      h({name: (r && r.name) || 'Dropped pin', address: (r && r.address) || '', lat: e.latlng.lat, lng: e.latlng.lng});
+      return;
+    }
+    showTemp({name:'Dropped pin', address:`${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`, lat:e.latlng.lat, lng:e.latlng.lng, unnamed:true});
+  });
+
+  $('searchForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const q = $('q').value.trim(); if (!q) return;
+    runSearch(q, $('results'), 'Add',
+      place => { addPlace(place); $('results').style.display = 'none'; clearTemp(); },
+      place => { map.flyTo([place.lat, place.lng], 13, {duration:.8}); showTemp(place); });
+  });
+  $('q').addEventListener('input', e => { if (!e.target.value) $('results').style.display = 'none'; });
+
+  // =====================================================================
+  //                           TRIP PLANNER
+  // =====================================================================
+  const OSRM = ['https://router.project-osrm.org', 'https://routing.openstreetmap.de/routed-car'];
+  const legCache = new Map();
+  let legs = null, legsKey = '', routeSeq = 0, lastT0 = new Date();
+  let routeCache = null, lastPlan = null;
+  let evState = {key:'', status:'idle', proj:[], err:''};   // charger lookup state for the current route
+  const chargerCache = new Map();
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  const CHARGER_RADIUS_KM = 6;
+  let wx = {key: '', status: 'idle', days: {}, err: ''}, wxLoc = '', tripSpan = null;
+  const wxCache = new Map();
+
+  // <<optimizer
+  function hav(a, b){
+    const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+    const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*r) * Math.cos(b.lat*r) * Math.sin(dLng/2)**2;
+    return 2 * 6371 * Math.asin(Math.sqrt(x));
+  }
+  // Order `pts` to minimise straight-line travel from `start`, optionally finishing at `endPt`.
+  function bestOrder(start, pts, endPt){
+    const n = pts.length, all = [start, ...pts, ...(endPt ? [endPt] : [])], E = n + 1;
+    const D = all.map(a => all.map(b => hav(a, b)));
+    const cost = ord => {
+      let c = D[0][ord[0] + 1];
+      for (let i = 0; i < n - 1; i++) c += D[ord[i] + 1][ord[i + 1] + 1];
+      if (endPt) c += D[ord[n - 1] + 1][E];
+      return c;
+    };
+    if (n <= 1) return pts.map((_, i) => i);
+    if (n <= 9){
+      let best = null, bestC = Infinity;
+      const used = Array(n).fill(false), cur = [];
+      (function rec(last, c){
+        if (c >= bestC) return;
+        if (cur.length === n){
+          const total = c + (endPt ? D[last][E] : 0);
+          if (total < bestC){ bestC = total; best = cur.slice(); }
+          return;
+        }
+        for (let i = 0; i < n; i++) if (!used[i]){
+          used[i] = true; cur.push(i);
+          rec(i + 1, c + D[last][i + 1]);
+          cur.pop(); used[i] = false;
+        }
+      })(0, 0);
+      return best;
+    }
+    const left = new Set(pts.map((_, i) => i)); let ord = [], last = 0;
+    while (left.size){
+      let bi = -1, bd = Infinity;
+      left.forEach(i => { if (D[last][i + 1] < bd){ bd = D[last][i + 1]; bi = i; } });
+      ord.push(bi); left.delete(bi); last = bi + 1;
+    }
+    let improved = true;
+    while (improved){
+      improved = false;
+      for (let i = 0; i < n - 1; i++) for (let j = i + 1; j < n; j++){
+        const cand = ord.slice(0, i).concat(ord.slice(i, j + 1).reverse(), ord.slice(j + 1));
+        if (cost(cand) + 1e-9 < cost(ord)){ ord = cand; improved = true; }
+      }
+    }
+    return ord;
+  }
+  // optimizer>>
+
+  // <<ev
+  // Rough Supercharging curve: % of battery gained per minute at ~250 kW, by state of charge.
+  const CURVE = [[0,20,3.6],[20,40,3.2],[40,60,2.4],[60,70,1.8],[70,80,1.4],[80,90,0.9],[90,100,0.5]];
+  const powerFactor = kw => !kw ? 0.8 : kw >= 150 ? 0.5 + 0.5 * Math.min(1, kw / 250) : Math.max(0.3, 0.8 * kw / 150);
+  function chargeMins(from, to, kw){
+    if (to <= from) return 0;
+    const f = powerFactor(kw); let m = 0;
+    CURVE.forEach(([a, b, r]) => { const lo = Math.max(a, from), hi = Math.min(b, to); if (hi > lo) m += (hi - lo) / (r * f); });
+    return m + 3;   // plug-in / parking overhead
+  }
+
+  // Plans charging stops along a route.
+  // P: {U: usable km at 100%, reserve %, cap % (max charge at a stop), dest % (charge level after destination charging), startPct}
+  // nodeS: km position of every itinerary node; resetIdx: node indices where the car can charge (destination charging)
+  // chargers: [{s, off, kind, kw, stalls, ...}] with s = km along the route, off = km off the route
+  function planEV(P, nodeS, resetIdx, chargers){
+    const end = nodeS[nodeS.length - 1];
+    const per = km => km / P.U * 100;
+    const resets = resetIdx.map(i => nodeS[i]).filter(x => x > 1e-6 && x < end - 1e-6).sort((a, b) => a - b);
+    const cs = chargers.slice().sort((a, b) => a.s - b.s);
+
+    function greedy(cap){
+      const evs = []; let cur = 0, b = P.startPct, ri = 0, gap = null, guard = 0;
+      while (cur < end - 1e-6 && guard++ < 400){
+        while (ri < resets.length && resets[ri] <= cur + 1e-6) ri++;
+        const target = Math.min(end, ri < resets.length ? resets[ri] : Infinity);
+        const reach = (b - P.reserve) / 100 * P.U;
+        if (target - cur <= reach + 1e-6){
+          b -= per(target - cur); cur = target;
+          if (target < end - 1e-6){ b = Math.max(b, P.dest); ri++; }
+          continue;
+        }
+        const ok = cs.filter(c => c.s > cur + 0.2 && c.s < target - 0.2 && (c.s - cur) + 2 * c.off <= reach);
+        if (!ok.length){ gap = {from: cur, to: target, reach: Math.max(0, reach)}; break; }
+        const far = Math.max(...ok.map(c => c.s));
+        let best = null, bs = -Infinity;
+        ok.forEach(c => {
+          if (c.s < far - 20) return;   // only consider chargers near the farthest reachable one
+          const sc = (c.kind === 'tesla' ? 300 : 0) + (c.kw || 120) + (c.stalls || 4) * 3 - c.off * 15 - (far - c.s) * 0.5;
+          if (sc > bs){ bs = sc; best = c; }
+        });
+        evs.push({c: best, s: best.s, off: best.off});
+        cur = best.s; b = cap;
+      }
+      return {evs, gap};
+    }
+
+    let cap = Math.min(100, P.cap), r = greedy(cap);
+    if (r.gap && cap < 100){ const r2 = greedy(100); if (!r2.gap){ r = r2; cap = 100; } }
+
+    // Charge each stop only as much as the next hop needs (+ reserve), never above `cap`.
+    const evs = r.evs.map(e => ({c: e.c, s: e.s, off: e.off, to: 0}));
+    evs.forEach((e, k) => {
+      const nr = resets.find(x => x > e.s + 1e-6), lim = Math.min(end, nr === undefined ? Infinity : nr);
+      const nx = evs[k + 1];
+      const need = (nx && nx.s < lim) ? (nx.s - e.s) + 2 * nx.off : lim - e.s;
+      e.to = Math.min(cap, Math.max(1, Math.ceil(per(need) + P.reserve + 3)));
+    });
+    const overcap = evs.some(e => e.to > Math.min(100, P.cap) + 0.5);
+
+    // Forward simulation: battery at every node and at every charger.
+    const items = [];
+    nodeS.forEach((x, i) => items.push({s: x, k: 0, i}));
+    evs.forEach((e, j) => items.push({s: e.s, k: 1, j}));
+    items.sort((a, b) => a.s - b.s || a.k - b.k);
+    const resetSet = new Set(resetIdx);
+    let pos = 0, b = P.startPct, minPct = b;
+    const nodeBatt = [], events = [];
+    items.forEach(it => {
+      b -= per(it.s - pos); pos = it.s;
+      if (it.k === 0){
+        const arr = it.i === 0 ? P.startPct : b;
+        const dep = (it.i > 0 && resetSet.has(it.i)) ? Math.max(arr, P.dest) : arr;
+        nodeBatt[it.i] = {arr, dep}; b = dep; minPct = Math.min(minPct, arr);
+      } else {
+        const e = evs[it.j];
+        b -= per(2 * e.off);
+        const arrive = b, to = Math.max(e.to, Math.min(100, arrive + 1));
+        events.push({c: e.c, s: e.s, off: e.off, arrive, to, mins: chargeMins(arrive, to, e.c.kw), detourMin: e.off * 2 * 1.5});
+        b = to; minPct = Math.min(minPct, arrive);
+      }
+    });
+    return {gap: r.gap, events, nodeBatt, overcap, finalPct: nodeBatt[nodeBatt.length - 1].arr, minPct};
+  }
+
+  function parseKw(t){
+    let best = 0;
+    ['socket:tesla_supercharger:output','socket:tesla_supercharger_ccs:output','socket:type2_combo:output','socket:ccs:output','plug:nacs:output','charging_station:output','output'].forEach(k => {
+      if (t[k]){ const m = String(t[k]).match(/[\d.]+/); if (m) best = Math.max(best, parseFloat(m[0]) * (/mw/i.test(t[k]) ? 1000 : 1)); }
+    });
+    return best;
+  }
+  // Turn an Overpass element into a charger object (or null if unusable).
+  function parseCharger(el){
+    const t = el.tags || {};
+    const lat = el.lat != null ? el.lat : (el.center && el.center.lat), lng = el.lon != null ? el.lon : (el.center && el.center.lon);
+    if (lat == null || lng == null) return null;
+    if (/^(private|no)$/i.test(t.access || '')) return null;
+    const tesla = /tesla|supercharger/i.test([t.brand, t.operator, t.network, t.name].join(' ')) || !!t['socket:tesla_supercharger'] || !!t['socket:tesla_supercharger_ccs'];
+    if (!tesla && /^customers$/i.test(t.access || '')) return null;
+    if (/destination/i.test((t.network || '') + ' ' + (t.name || '')) && !/supercharger/i.test(t.name || '')) return null;
+    return {
+      id: el.type + el.id, lat, lng, kind: tesla ? 'tesla' : 'dc', kw: parseKw(t), op: t.operator || t.network || t.brand || '',
+      stalls: parseInt(t.capacity) || parseInt(t['socket:tesla_supercharger']) || 0,
+      name: t.name || (tesla ? 'Tesla Supercharger' : (t.operator || t.brand || 'DC fast charger'))
+    };
+  }
+  // Snap chargers onto the route polyline (vs = [{lat,lng,s}]). A charger near the route in several
+  // places (e.g. a round trip that retraces its path) is kept once per pass. Far-off ones and duplicates are dropped.
+  function projectChargers(vs, list, maxOff){
+    const out = [], lim = maxOff / 111 * 1.6;   // generous degree-box prefilter
+    list.forEach(c => {
+      const cosl = Math.cos(c.lat * Math.PI / 180);
+      let bi = -1, bd = Infinity;
+      const flush = () => {
+        if (bi >= 0){ const off = hav(c, vs[bi]); if (off <= maxOff) out.push(Object.assign({}, c, {s: vs[bi].s, off})); }
+        bi = -1; bd = Infinity;
+      };
+      for (let i = 0; i < vs.length; i++){
+        const dx = (vs[i].lng - c.lng) * cosl, dy = vs[i].lat - c.lat, d = dx * dx + dy * dy;
+        if (d <= lim * lim){ if (d < bd){ bd = d; bi = i; } } else flush();
+      }
+      flush();
+    });
+    out.sort((a, b) => ((b.kw || 0) + (b.stalls || 0)) - ((a.kw || 0) + (a.stalls || 0)));
+    const keep = [];
+    out.forEach(c => { if (!keep.some(k => hav(k, c) < 0.2 && Math.abs(k.s - c.s) < 3)) keep.push(c); });
+    return keep.sort((a, b) => a.s - b.s);
+  }
+  // ev>>
+
+  // <<wx
+  const pad2 = n => String(n).padStart(2, '0');
+  const isoLocal = d => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  function addDaysIso(str, n){ const [y, m, d] = str.split('-').map(Number); return isoLocal(new Date(y, m - 1, d + n)); }
+  // WMO weather code -> [emoji, label]
+  function wmo(c){
+    if (c === 0) return ['☀️', 'Clear'];
+    if (c === 1) return ['🌤️', 'Mostly clear'];
+    if (c === 2) return ['⛅', 'Partly cloudy'];
+    if (c === 3) return ['☁️', 'Overcast'];
+    if (c === 45 || c === 48) return ['🌫️', 'Fog'];
+    if (c >= 51 && c <= 57) return ['🌦️', 'Drizzle'];
+    if (c >= 61 && c <= 67) return ['🌧️', c >= 65 ? 'Heavy rain' : 'Rain'];
+    if (c >= 71 && c <= 77) return ['❄️', 'Snow'];
+    if (c >= 80 && c <= 82) return ['🌦️', c === 82 ? 'Violent showers' : 'Showers'];
+    if (c === 85 || c === 86) return ['🌨️', 'Snow showers'];
+    if (c >= 95) return ['⛈️', 'Thunderstorm'];
+    return ['🌡️', 'Unknown'];
+  }
+  // Short driving-relevant warning for a day ('' if nothing notable).
+  function dayWarn(d){
+    const w = [];
+    if (d.code >= 95) w.push('storms');
+    if ((d.gust || 0) >= 60) w.push('strong wind');
+    if ((d.rain || 0) >= 20) w.push('heavy rain');
+    if ((d.code >= 71 && d.code <= 77) || d.code === 85 || d.code === 86) w.push('snow');
+    if (d.tmin != null && d.tmin <= 0) w.push('frost');
+    return w.join(', ');
+  }
+  // Open-Meteo response (one object, or an array for several locations) -> array of day arrays.
+  function parseWx(json){
+    return (Array.isArray(json) ? json : [json]).map(o => {
+      const d = (o && o.daily) || {}, at = (k, i) => (d[k] ? d[k][i] : null);
+      return (d.time || []).map((t, i) => ({
+        date: t, code: at('weather_code', i), tmax: at('temperature_2m_max', i), tmin: at('temperature_2m_min', i),
+        rain: at('precipitation_sum', i), pop: at('precipitation_probability_max', i),
+        wind: at('wind_speed_10m_max', i), gust: at('wind_gusts_10m_max', i)
+      }));
+    });
+  }
+  // wx>>
+
+  // --- formatting ---
+  function fmtDist(km){
+    const v = trip.units === 'mi' ? km * 0.621371 : km;
+    return (v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString()) + (trip.units === 'mi' ? ' mi' : ' km');
+  }
+  function fmtDur(min){
+    min = Math.round(min); const h = Math.floor(min / 60), m = min % 60;
+    return h ? `${h} h${m ? ' ' + m + ' min' : ''}` : `${m} min`;
+  }
+  const sod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  function fmtT(d){
+    const n = Math.round((sod(d) - sod(lastT0)) / 864e5) + 1;
+    return `Day ${n} · ${d.toLocaleDateString(undefined, {weekday:'short', day:'numeric', month:'short'})}, ${d.toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'})}`;
+  }
+
+  // --- nodes: start (optional) + stops (+ return) ---
+  function tripNodes(){
+    const nodes = [];
+    if (trip.start) nodes.push({type:'start', day: 1, name: trip.start.name, lat: trip.start.lat, lng: trip.start.lng});
+    const located = trip.stops.map(st => st.blank ? null : stopPlace(st));
+    let cur = trip.start ? {lat: trip.start.lat, lng: trip.start.lng} : null;
+    trip.stops.forEach((st, i) => {
+      let p = located[i], blank = false;
+      if (!p && st.blank){                       // placeholder: no place yet -> sits where you already are
+        p = cur || located.slice(i + 1).find(Boolean) || (home && {lat: home.lat, lng: home.lng});
+        blank = true; if (!p) return;
+      } else if (p) cur = {lat: p.lat, lng: p.lng};
+      if (p) nodes.push({type:'stop', stopIdx: i, s: st, day: st.day || 1, name: blank ? 'no place chosen yet' : p.name, lat: p.lat, lng: p.lng, blank});
+    });
+    if (nodes.length){
+      const last = nodes[nodes.length - 1];
+      // heading home after a night's sleep happens the next day
+      const retDay = last.type === 'stop' ? last.day + (kindOf(last.s) === 'sleep' ? 1 : 0) : 1;
+      if (trip.end === 'start' && nodes.length > 1)
+        nodes.push({type:'return', day: retDay, name: trip.start ? 'Back at start' : 'Back at ' + nodes[0].name, lat: nodes[0].lat, lng: nodes[0].lng});
+      else if (trip.end === 'home' && home && hav(last, home) > 0.05)
+        nodes.push({type:'return', day: retDay, name: 'Back home', lat: home.lat, lng: home.lng});
+    }
+    return nodes;
+  }
+  const structKey = nodes => nodes.map(n => n.lat.toFixed(5) + ',' + n.lng.toFixed(5)).join('|');
+  const legsReady = nodes => !!legs && legsKey === structKey(nodes) && legs.length === Math.max(0, nodes.length - 1);
+
+  // --- routing (OSRM public demo servers, driving) ---
+  async function routeLeg(a, b){
+    const key = `${a.lat.toFixed(5)},${a.lng.toFixed(5)};${b.lat.toFixed(5)},${b.lng.toFixed(5)}`;
+    if (hav(a, b) < 0.03) return {kind: 'road', dist: 0, dur: 0, geom: [[a.lat, a.lng], [b.lat, b.lng]]};   // same place (e.g. lunch where you are)
+    if (legCache.has(key)) return legCache.get(key);
+    let leg = null, noRoute = false;
+    for (const base of OSRM){
+      try {
+        const res = await fetch(`${base}/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`);
+        const data = await res.json();
+        if (data.code === 'Ok' && data.routes && data.routes[0]){
+          const r = data.routes[0];
+          leg = {kind:'road', dist: r.distance / 1000, dur: r.duration / 60, geom: r.geometry.coordinates.map(c => [c[1], c[0]])};
+          break;
+        }
+        if (data.code === 'NoRoute' || data.code === 'NoSegment'){ noRoute = true; break; }
+      } catch(e) { /* try next server */ }
+    }
+    if (!leg){
+      const d = hav(a, b), straight = [[a.lat, a.lng], [b.lat, b.lng]];
+      leg = noRoute ? {kind:'noroute', dist: d, dur: 0, geom: straight}
+                    : {kind:'estimate', dist: d * 1.3, dur: d * 1.3 / 70 * 60, geom: straight};
+    }
+    if (leg.kind !== 'estimate') legCache.set(key, leg);   // retry estimates later
+    return leg;
+  }
+
+  async function refreshRoute(fit = true){
+    const seq = ++routeSeq, nodes = tripNodes();
+    saveTrip(); updateBadge();
+    legs = null; legsKey = ''; lastPlan = null; routeCache = null;
+    if (nodes.length < 2){ legs = []; legsKey = structKey(nodes); renderTrip(); drawTrip(); return; }
+    renderTrip(); drawTrip();
+    const out = [];
+    for (let i = 0; i < nodes.length - 1; i++){
+      out.push(await routeLeg(nodes[i], nodes[i + 1]));
+      if (seq !== routeSeq) return;
+    }
+    legs = out; legsKey = structKey(nodes);
+    renderTimes(); drawTrip();
+    if (fit && !$('paneTrip').hidden) fitTrip();
+  }
+
+  // --- schedule ---
+  function dayStartAt(d){
+    const [y, m, dd] = trip.date.split('-').map(Number);
+    const [hh, mm] = ((trip.dayStart && trip.dayStart[d]) || trip.time || '09:00').split(':').map(Number);
+    return new Date(y, m - 1, dd + d - 1, hh || 0, mm || 0);
+  }
+  function schedule(nodes, evp){
+    lastT0 = dayStartAt(1);                       // Day 1 = trip date
+    const firstDay = (nodes[0] && nodes[0].day) || 1;
+    let t = dayStartAt(firstDay), curDay = firstDay;
+    let dist = 0, drive = 0, noroute = 0, estimates = 0, long = 0, chargeMin = 0;
+    const times = [];
+    nodes.forEach((n, i) => {
+      const day = n.day || 1; let arr;
+      if (i === 0) arr = new Date(t);
+      else {
+        if (day > curDay){ const ds = dayStartAt(day); if (ds > t) t = ds; }   // a new day starts at its start time (after the night)
+        const L_ = legs[i - 1];
+        if (L_.kind === 'noroute') noroute++;
+        else { dist += L_.dist; drive += L_.dur; if (L_.kind === 'estimate') estimates++; if (L_.dur > 300) long++; }
+        const extra = evp && evp.byLeg[i - 1] ? evp.byLeg[i - 1].reduce((a, e) => a + e.mins + e.detourMin, 0) : 0;
+        chargeMin += extra;
+        arr = new Date(t.getTime() + (L_.dur + extra) * 60000);
+      }
+      curDay = Math.max(curDay, day);
+      let start = new Date(arr), dep = new Date(arr), late = 0;
+      if (n.type === 'stop'){
+        const st = n.s;
+        if (/^\d\d:\d\d$/.test(st.at || '')){
+          const [ah, am] = st.at.split(':').map(Number);
+          const planned = new Date(arr.getFullYear(), arr.getMonth(), arr.getDate(), ah, am);
+          if (planned > arr) start = planned;                  // arrive early -> wait until the planned time
+          else { late = Math.round((arr - planned) / 60000); if (late > 720) late = 0; }
+        }
+        dep = kindOf(st) === 'sleep' ? new Date(start) : new Date(start.getTime() + Math.max(0, +st.stay || 0) * 3600000);
+      }
+      times.push({arr, start, dep, late}); t = dep;
+    });
+    return {times, dist, drive, noroute, estimates, long, chargeMin};
+  }
+
+  // --- render trip panel ---
+  function updateBadge(){ $('tripCount').textContent = trip.stops.length ? ` (${trip.stops.length})` : ''; }
+
+  function renderTrip(){
+    const nodes = tripNodes();
+    updateBadge();
+
+    // start box
+    const homeBtn = (home && !(trip.start && trip.start.fromHome)) ? `<div class="row tight" style="margin:0 0 6px"><button id="useHome" type="button">🏠 Start from home</button></div>` : '';
+    $('startBox').innerHTML = (trip.start
+      ? `<div class="startcur"><span class="badge s">${trip.start.fromHome ? '🏠' : 'S'}</span><div class="nb"><b title="${esc(trip.start.name)}">${esc(trip.start.name)}</b><small>Leaves <span data-t="dep:0"></span><span class="bt" data-b="dep:0" hidden></span></small></div><button class="x" id="clearStart" title="Clear start">✕</button></div>`
+      : `<div class="hint">No start set — the first stop is used as the starting point.</div>`) + homeBtn;
+
+    // timeline, grouped into days
+    const nDays = Math.max(trip.nDays || 1, ...nodes.map(n => n.day || 1));
+    const kindOpts = sel => Object.entries(KINDS).filter(([k]) => k !== 'note').map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v.icon} ${v.label}</option>`).join('');
+    let html = '', visitNum = 0;
+    for (let d = 1; d <= nDays; d++){
+      const inDay = nodes.map((n, i) => ({n, i})).filter(x => x.n.type !== 'start' && (x.n.day || 1) === d);
+      html += `<div class="dayhdr">
+        <div><b>Day ${d}</b> <span data-dd="${d}"></span></div>
+        <div class="dh2"><span class="dsum" data-dc="${d}"></span><span class="dsum" data-ds="${d}"></span>
+          <label class="dstart">starts <input type="time" data-dact="dstart" data-d="${d}" value="${(trip.dayStart && trip.dayStart[d]) || trip.time || '09:00'}"></label>
+          ${d > 1 ? `<button class="x" type="button" data-dact="delday" data-d="${d}" title="Remove this day (its items move to the previous day)">✕</button>` : ''}</div></div>`;
+      inDay.forEach(({n, i}) => {
+        const isNote = n.type === 'stop' && kindOf(n.s) === 'note';
+        if (i > 0 && !isNote) html += `<div class="leg" data-leg="${i - 1}"></div>`;
+        if (n.type === 'stop'){
+          const k = kindOf(n.s), K = KINDS[k];
+          if (k === 'visit' && !n.blank) visitNum++;
+          const prev = trip.stops[n.stopIdx - 1], next = trip.stops[n.stopIdx + 1];
+          const first = !(prev && (prev.day || 1) === n.day), last = !(next && (next.day || 1) === n.day);
+          const dayOpts = Array.from({length: nDays}, (_, x) => `<option value="${x + 1}" ${x + 1 === n.day ? 'selected' : ''}>${x + 1}</option>`).join('');
+          if (k === 'note'){
+            html += `<div class="node stop k-note" data-si="${n.stopIdx}" data-lat="${n.lat}" data-lng="${n.lng}"><span class="badge" style="background:${K.color}">${K.icon}</span><div class="nb">
+              <div class="top"><b>Note</b><span class="mv"><button data-act="up" ${first ? 'disabled' : ''} title="Move earlier">▲</button><button data-act="down" ${last ? 'disabled' : ''} title="Move later">▼</button><button data-act="rm" title="Remove">✕</button></span></div>
+              <div class="memo" style="display:contents"><textarea data-act="text" rows="2" placeholder="Write a note… (booking numbers, reminders, website links)">${esc(n.s.text || '')}</textarea><div class="mlinks"></div></div>
+              <div class="stay"><label>Day <select data-act="day">${dayOpts}</select></label></div></div></div>`;
+            return;
+          }
+          const owner = photoOwner(n.s), cover = ((owner && owner.photos) || []).find(id => photoCache.has(id));
+          const ttl = esc((k === 'visit' && !n.blank ? '' : K.label + (n.blank ? '' : ' · ')) + (n.blank ? (k === 'visit' ? ' · stop' : '') : n.name));
+          const mv = `${n.s.place ? '<button data-act="save" title="Trip-only stop: save it to your wishlist">☆</button>' : ''}<button data-act="up" ${first ? 'disabled' : ''} title="Move earlier">▲</button><button data-act="down" ${last ? 'disabled' : ''} title="Move later">▼</button><button data-act="rm" title="Remove from trip">✕</button>`;
+          const bdg = `<span class="badge" style="background:${K.color}">${k === 'visit' && !n.blank ? visitNum : K.icon}</span>`;
+          html += `<div class="node stop rich k-${k}" data-si="${n.stopIdx}" data-lat="${n.lat}" data-lng="${n.lng}">
+            ${cover
+              ? `<div class="hero"><img class="heroimg" src="${photoCache.get(cover)}" alt="" data-pid="${cover}"><div class="hgrad"></div><span class="hbadge">${bdg}</span><span class="mv hmv">${mv}</span><div class="htitle" title="${esc(n.name)}">${ttl}</div></div>`
+              : `<div class="nhead">${bdg}<b class="ntitle" title="${esc(n.name)}">${ttl}</b><span class="mv">${mv}</span></div>`}
+            <div class="nb">
+              <div class="meta"><span>${n.blank ? 'Around' : 'Arrive'} <b data-t="arr:${i}"></b><span class="bt" data-b="arr:${i}" hidden></span></span>
+                ${k !== 'sleep' ? `<span>Leaves <b data-t="dep:${i}"></b><span class="bt" data-b="dep:${i}" hidden></span></span>` : '<span>💤 Overnight</span>'}</div>
+              ${n.blank ? '<small style="display:block;margin-top:6px"><button type="button" class="chip" data-act="fill">📍 Choose a place</button> ' + (k === 'charge' ? '<button type="button" class="chip" data-act="findchg">⚡ Find chargers nearby</button> ' : '') + '<span style="color:var(--muted,#6b7280)">optional — until then it stays where you already are</span></small>' : ''}
+              <small class="wxl" data-w="${i}" hidden></small>
+              <small class="wxl" data-m="${i}" hidden></small>
+              <div class="fields">
+                <label class="fld"><span>Type</span><select data-act="kind" title="Type">${kindOpts(k)}</select></label>
+                <label class="fld"><span>Day</span><select data-act="day">${dayOpts}</select></label>
+                <label class="fld costl"><span>Cost (${esc(trip.cur || '$')})</span><input type="number" min="0" step="any" placeholder="0" value="${n.s.cost == null ? '' : n.s.cost}" data-act="cost" title="Estimated cost for this block (total, not per person)"></label>
+                <label class="fld"><span>${k === 'sleep' ? 'Bed by' : 'At'}</span><input type="time" data-act="at" value="${esc(n.s.at || '')}" title="Optional: when you want to be here"></label>
+                ${k !== 'sleep' ? `<label class="fld"><span>Stay (hours)</span><input type="number" min="0" step="0.5" value="${n.s.stay}" data-act="stay"></label>` : ''}
+              </div>
+              <div class="nfoot">
+                ${carSet() && !n.blank ? `<label class="chgl" title="A charger you can use here (hotel, friend’s place, a Supercharger you’re stopping at anyway)"><input type="checkbox" data-act="chg" ${n.s.charge ? 'checked' : ''}> 🔌 can charge here</label>` : '<span></span>'}
+                <button type="button" class="chip" data-act="split" title="End the day after this stop: the stops after it move to the next day">🌙 End day here</button>
+              </div>
+              <div class="memo">${n.s.memo ? '' : '<button type="button" class="chip" data-act="memoopen">📝 Add note / link</button>'}<textarea data-act="memo" rows="2" placeholder="Notes, booking details, website links…" ${n.s.memo ? '' : 'hidden'}>${esc(n.s.memo || '')}</textarea><div class="mlinks"></div>${photoStrip(owner)}</div>
+            </div></div>`;
+        } else {
+          html += `<div class="node" data-lat="${n.lat}" data-lng="${n.lng}"><span class="badge s">${n.name === 'Back home' ? '🏠' : '↩'}</span><div class="nb"><div class="top"><b>${esc(n.name)}</b><span class="mv"><button data-act="rmreturn" title="Don’t route back">✕</button></span></div><small>Arrive <span data-t="arr:${i}"></span><span class="bt" data-b="arr:${i}" hidden></span></small><small class="wxl" data-w="${i}" hidden></small></div></div>`;
+        }
+      });
+      if (!inDay.length) html += `<div class="hint" style="padding:4px 2px 6px">Nothing planned yet.</div>`;
+      html += `<div class="dayadd">${Object.entries(KINDS).map(([k, v]) => `<button type="button" data-dact="addk" data-d="${d}" data-k="${k}">＋ ${v.icon} ${v.label}</button>`).join('')}</div>`;
+    }
+    $('stops').innerHTML = html;
+    refreshLinks();
+
+    // add-stop selector & start-from-wishlist selector
+    const avail = places.filter(p => !inTrip(p.id));
+    const selList = ($('stopKind').value || 'visit') === 'visit' ? avail : places;   // meals/sleep can be at a place already in the trip
+    $('addStopSel').innerHTML = `<option value="">＋ Add a wishlist place…</option>` + selList.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    $('addStopSel').disabled = !selList.length;
+    $('addAll').disabled = !avail.length;
+    $('addAll').textContent = avail.length ? `Add all (${avail.length})` : 'Add all';
+    const dayNow = $('stopDay').value;
+    $('stopDay').innerHTML = Array.from({length: nDays}, (_, x) => `<option value="${x + 1}">Day ${x + 1}</option>`).join('') + `<option value="new">＋ New day</option>`;
+    $('stopDay').value = (dayNow && dayNow !== 'new' && +dayNow <= nDays) ? dayNow : String(nDays);
+    renderHomeRow();
+    refreshWishSelects(); renderHomeBox(); renderEndSelect(); ensureWeather();
+
+    renderTimes();
+  }
+
+  // --- weather (Open-Meteo: free, no API key, ~16 days ahead) ---
+  const wxKey = n => n.lat.toFixed(2) + ',' + n.lng.toFixed(2);
+  function wxLocs(){
+    const seen = new Map();
+    tripNodes().forEach(n => { const k = wxKey(n); if (!seen.has(k)) seen.set(k, {key: k, lat: n.lat, lng: n.lng, name: (n.type === 'start' ? 'Start · ' : '') + n.name}); });
+    return [...seen.values()];
+  }
+  function ensureWeather(){
+    const locs = wxLocs(), key = locs.map(l => l.key).join('|') + '|' + todayStr();
+    if (!locs.length){ wx = {key, status: 'idle', days: {}, err: ''}; return; }
+    if (wx.key === key) return;
+    if (wxCache.has(key)){ wx = {key, status: 'ok', days: wxCache.get(key), err: ''}; return; }
+    wx = {key, status: 'loading', days: {}, err: ''};
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${locs.map(l => l.lat.toFixed(3)).join(',')}&longitude=${locs.map(l => l.lng.toFixed(3)).join(',')}` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max&timezone=auto&forecast_days=16&wind_speed_unit=kmh`;
+    fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(j => {
+      const per = parseWx(j), days = {};
+      locs.forEach((l, i) => { days[l.key] = per[i] || []; });
+      wxCache.set(key, days);
+      if (wx.key === key){ wx.status = 'ok'; wx.days = days; }
+      renderTimes();
+    }).catch(e => {
+      if (wx.key === key){ wx.status = 'error'; wx.err = e.message; }
+      renderWeather();
+    });
+  }
+  const tmp = c => Math.round(trip.units === 'mi' ? c * 9 / 5 + 32 : c);
+  const wspd = k => trip.units === 'mi' ? Math.round(k * 0.621371) + ' mph' : Math.round(k) + ' km/h';
+  const rainStr = mm => mm == null ? '' : (trip.units === 'mi' ? (mm / 25.4).toFixed(mm < 25.4 ? 2 : 1) + ' in' : mm.toFixed(mm < 10 ? 1 : 0) + ' mm');
+
+  function renderWeather(){
+    const locs = wxLocs(), sel = $('wxLoc'), strip = $('wxStrip'), note = $('wxNote');
+    if (!locs.length){
+      sel.hidden = true; sel.dataset.sig = ''; strip.innerHTML = '';
+      note.textContent = 'Add a start point or stops to see the forecast for your trip dates.'; return;
+    }
+    sel.hidden = false;
+    if (!locs.some(l => l.key === wxLoc)) wxLoc = (locs.find(l => !/^Start/.test(l.name)) || locs[0]).key;
+    const sig = locs.map(l => l.key + l.name).join('|');
+    if (sel.dataset.sig !== sig){ sel.innerHTML = locs.map(l => `<option value="${l.key}">${esc(l.name)}</option>`).join(''); sel.dataset.sig = sig; }
+    sel.value = wxLoc;
+    if (wx.status === 'loading'){ strip.innerHTML = ''; note.textContent = 'Loading forecast…'; return; }
+    if (wx.status === 'error'){
+      strip.innerHTML = ''; note.innerHTML = `Couldn’t load the forecast (${esc(wx.err)}). <button id="retryWx" type="button" style="padding:1px 8px;font-size:12px">Retry</button>`; return;
+    }
+    const days = wx.days[wxLoc] || [], today = todayStr();
+    let start = trip.date, pre = '';
+    if (start < today){ start = today; pre = 'Your trip date has passed, so this shows the next 7 days.'; }
+    else if (start > addDaysIso(today, 9)){ start = today; pre = 'Forecasts only reach about 16 days ahead, so your trip date is too far out. Showing the next 7 days instead.'; }
+    const span = tripSpan || {from: trip.date, to: trip.date};
+    const shown = days.filter(d => d.date >= start).slice(0, 7);
+    strip.innerHTML = shown.map(d => {
+      const [ic, lab] = wmo(d.code), w = dayWarn(d), dt = d.date.split('-').map(Number), dd = new Date(dt[0], dt[1] - 1, dt[2]);
+      const inTrip = d.date >= span.from && d.date <= span.to;
+      return `<div class="wxday ${inTrip ? 'trip' : ''} ${w ? 'warn' : ''}" title="${esc(lab + (w ? ' · ⚠ ' + w : ''))}">
+        <div><b>${dd.toLocaleDateString(undefined, {weekday: 'short'})}</b> ${dd.getDate()}</div>
+        <div class="ic">${ic}</div>
+        <div><span class="hi">${tmp(d.tmax)}°</span> <span class="lo">${tmp(d.tmin)}°</span></div>
+        <div class="r">💧 ${d.pop != null ? d.pop + '%' : ''}${(d.rain || 0) >= 0.1 ? ' · ' + rainStr(d.rain) : ''}</div>
+        <div class="lo">💨 ${wspd(d.wind || 0)}</div>${w ? `<div style="color:#9b1c1c">⚠ ${esc(w)}</div>` : ''}</div>`;
+    }).join('') || '';
+    let msg = (pre ? pre + ' ' : '') + `Forecast by Open-Meteo (${trip.units === 'mi' ? '°F · mph · in' : '°C · km/h · mm'}). Blue = your trip days.`;
+    if (!shown.length) msg = 'No forecast data for this location.';
+    if (carSet() && shown.some(d => d.tmin != null && d.tmin <= 5)) msg += ' ❄ Cold days can cut EV range, so consider lowering the Real-world slider.';
+    note.textContent = msg;
+  }
+
+  function renderHomeBox(){
+    $('homeBox').innerHTML = home
+      ? `<div class="homebox"><span style="font-size:18px">🏠</span><div class="nb"><b title="${esc(home.name)}">${esc(home.name)}</b><small>${esc(home.address || '')}</small></div><button class="x" id="clearHome" title="Remove home">✕</button></div>`
+      : `<div class="hint">No home set yet. Set it once and use it as a start or end for any trip.</div>`;
+  }
+  function renderEndSelect(){
+    const opts = [['last', 'Ends at the last stop'], ['start', 'Back at the start'], ['home', home ? 'Back home' : 'Back home (set home first)']];
+    $('tEnd').innerHTML = opts.map(([v, l]) => `<option value="${v}" ${trip.end === v ? 'selected' : ''} ${v === 'home' && !home ? 'disabled' : ''}>${l}</option>`).join('');
+  }
+
+  // --- EV: route geometry, charger lookup, plan ---
+  function buildRoute(){
+    const vs = [], nodeS = [0]; let S = 0;
+    legs.forEach(l => {
+      const g = l.geom, Ld = l.kind === 'noroute' ? 0 : l.dist;
+      if (l.kind !== 'noroute' && g.length > 1){
+        let G = 0; const cum = [0];
+        for (let k = 1; k < g.length; k++){ G += hav({lat: g[k-1][0], lng: g[k-1][1]}, {lat: g[k][0], lng: g[k][1]}); cum.push(G); }
+        const sc = G > 0 ? Ld / G : 0;
+        g.forEach((pt, k) => vs.push({lat: pt[0], lng: pt[1], s: S + cum[k] * sc}));
+      }
+      S += Ld; nodeS.push(S);
+    });
+    return {vs, nodeS};
+  }
+  const evParams = () => ({U: car.rangeKm * car.factor, reserve: car.reserve, cap: Math.min(100, car.chargeTo), dest: Math.min(100, car.chargeTo), startPct: trip.startPct});
+
+  async function fetchChargers(vs, includeDC){
+    const total = vs[vs.length - 1].s, step = Math.max(6, total / 150), coords = []; let nxt = -1;
+    vs.forEach((v, i) => { if (v.s >= nxt || i === vs.length - 1){ coords.push(v.lat.toFixed(4) + ',' + v.lng.toFixed(4)); nxt = v.s + step; } });
+    const tesla = ['["socket:tesla_supercharger"]', '["brand"~"Tesla",i]', '["operator"~"Tesla",i]', '["network"~"Tesla",i]', '["name"~"Supercharger",i]'];
+    const dc = ['["socket:type2_combo"]', '["socket:ccs"]'];
+    const q = `[out:json][timeout:60];nwr["amenity"="charging_station"](around:${CHARGER_RADIUS_KM * 1000},${coords.join(',')})->.c;(${tesla.concat(includeDC ? dc : []).map(f => `nwr.c${f};`).join('')});out center tags;`;
+    const errors = [];
+    for (const url of OVERPASS){
+      try {
+        const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'data=' + encodeURIComponent(q)});
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.remark && /error|timed out|memory/i.test(data.remark)) throw new Error(data.remark);
+        return (data.elements || []).map(parseCharger).filter(Boolean);
+      } catch(e) { errors.push(e.message); }
+    }
+    throw new Error(errors.join(' | '));
+  }
+  function ensureChargers(key, R){
+    if (chargerCache.has(key)){ evState = {key, status: 'ok', proj: chargerCache.get(key), err: ''}; return; }
+    evState = {key, status: 'loading', proj: [], err: ''};
+    fetchChargers(R.vs, car.includeDC).then(raw => {
+      const proj = projectChargers(R.vs, raw, CHARGER_RADIUS_KM + 0.5);
+      chargerCache.set(key, proj);
+      if (evState.key === key){ evState.status = 'ok'; evState.proj = proj; }
+      renderTimes(); drawTrip();
+    }).catch(err => {
+      if (evState.key === key){ evState.status = 'error'; evState.err = err.message; }
+      renderTimes();
+    });
+  }
+  function computeEV(nodes){
+    lastPlan = null;
+    if (!carSet() || nodes.length < 2) return null;
+    if (!routeCache || routeCache.legs !== legs) routeCache = Object.assign({legs}, buildRoute());
+    const R = routeCache; if (!R.vs.length) return null;
+    const P = evParams();
+    const resetIdx = nodes.map((n, i) => (i > 0 && n.type === 'stop' && n.s.charge) ? i : -1).filter(i => i > 0);
+    let plan = planEV(P, R.nodeS, resetIdx, []);
+    plan.usedChargers = false;
+    if (plan.gap){
+      const key = legsKey + '|' + (car.includeDC ? 1 : 0);
+      if (evState.key !== key) ensureChargers(key, R);
+      if (evState.key === key && evState.status === 'ok'){ plan = planEV(P, R.nodeS, resetIdx, evState.proj); plan.usedChargers = true; }
+    }
+    plan.byLeg = nodes.slice(1).map(() => []);
+    plan.events.forEach(e => { for (let i = 1; i < R.nodeS.length; i++) if (e.s <= R.nodeS[i] + 1e-6){ plan.byLeg[i - 1].push(e); break; } });
+    if (plan.gap){
+      plan.gapLeg = 0;
+      for (let i = 1; i < R.nodeS.length; i++) if (plan.gap.from < R.nodeS[i] - 1e-6){ plan.gapLeg = i - 1; break; }
+      plan.gapMsg = `About ${fmtDist(plan.gap.from)} into the trip the battery only reaches ${fmtDist(plan.gap.reach)} further, and no suitable charger was found in that stretch. Start with more charge, add a stop with a charger, or enable other DC chargers.`;
+    }
+    lastPlan = plan; return plan;
+  }
+  const refreshPlanView = () => { renderTimes(); drawTrip(); };
+
+  const COST_CATS = {lunch: ['🍽️ Food'], dinner: ['🍽️ Food'], sleep: ['🛏️ Accommodation'], charge: ['🔌 Charging'], visit: ['📍 Places & activities']};
+  // Turn any web addresses in a note into clickable chips.
+  function linkChips(text){
+    const out = [], seen = new Set();
+    (String(text || '').match(/(?:https?:\/\/|www\.)[^\s<>"')\]]+/gi) || []).forEach(raw => {
+      const u = raw.replace(/[.,;:!?]+$/, ''), href = /^https?:/i.test(u) ? u : 'https://' + u;
+      if (seen.has(href)) return; seen.add(href);
+      let label = href; try { const U = new URL(href); label = U.hostname.replace(/^www\./, '') + (U.pathname.length > 1 ? U.pathname : ''); } catch(e) { return; }
+      out.push(`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="${esc(href)}">🔗 ${esc(label.length > 38 ? label.slice(0, 37) + '…' : label)}</a>`);
+    });
+    return out.join('');
+  }
+  function refreshLinks(){
+    document.querySelectorAll('#stops .memo').forEach(m => { const ta = m.querySelector('textarea'); m.querySelector('.mlinks').innerHTML = ta ? linkChips(ta.value) : ''; });
+  }
+  // ----- photo handlers -----
+  document.addEventListener('click', e => {
+    const add = e.target.closest('[data-act=phadd]'), del = e.target.closest('[data-act=phdel]'), cov = e.target.closest('[data-act=phcover]'), img = e.target.closest('.ph img, .heroimg, .cardhero');
+    if (!add && !del && !cov && !img) return;
+    const card = e.target.closest('.card'), node = e.target.closest('.node');
+    const owner = card ? placeById(card.dataset.id) : (node ? (trip.stops[+node.dataset.si] && photoOwner(trip.stops[+node.dataset.si])) : null);
+    if (img && !del && !cov){
+      const lb = document.createElement('div'); lb.id = 'lightbox'; lb.innerHTML = `<img src="${img.src}" alt="">`; lb.onclick = () => lb.remove(); document.body.appendChild(lb); return;
+    }
+    if (!owner) return;
+    const persist = () => { if (card) save(); else saveTrip(); };
+    if (cov){ owner.photos = [cov.dataset.pid].concat((owner.photos || []).filter(i => i !== cov.dataset.pid)); persist(); render(); renderTrip(); return; }
+    if (del){
+      owner.photos = (owner.photos || []).filter(i => i !== del.dataset.pid);
+      if (!photoRefs().has(del.dataset.pid)) photoDel(del.dataset.pid);
+      persist(); render(); renderTrip(); return;
+    }
+    photoTarget = {owner, persist}; $('photoFile').value = ''; $('photoFile').click();
+  });
+  $('photoFile').addEventListener('change', async e => {
+    const files = [...e.target.files], t = photoTarget; if (!files.length || !t) return;
+    let n = 0, bad = 0;
+    for (const f of files){
+      try { const url = await shrinkPhoto(f, 900), id = uid(); photoPut(id, url); (t.owner.photos = t.owner.photos || []).push(id); n++; } catch(err){ bad++; }
+    }
+    t.persist(); render(); renderTrip();
+    if (!pdb && n && !photoWarned){ photoWarned = true; toast('Heads up: this browser can’t keep photos between visits, so they’ll be lost on reload. Export a backup to keep them.'); }
+    else toast(n ? `Added ${n} photo${n === 1 ? '' : 's'}` : 'Couldn’t read that image (iPhone HEIC photos sometimes need converting to JPEG first)');
+    if (n && bad) toast(`${bad} file${bad === 1 ? '' : 's'} couldn’t be read`);
+  });
+  photoLoadAll();
+
+  // ---------- share / export itinerary ----------
+  function buildItinerary(o){
+    const nodes = tripNodes();
+    if (!nodes.length) return {error: 'Nothing to share yet — add a start point or some stops first.'};
+    if (!legsReady(nodes)) return {error: 'The route is still being worked out — try again in a moment.'};
+    const evp = nodes.length > 1 ? computeEV(nodes) : null, sc = schedule(nodes, evp);
+    const hm = d => d.toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'});
+    const cur = trip.cur || '$', ppl = Math.max(1, parseInt(trip.people) || 1);
+    const money = n => cur + (Number.isInteger(+n.toFixed(2)) ? Math.round(n).toLocaleString() : n.toFixed(2));
+    const [y, m, dd] = trip.date.split('-').map(Number);
+    const dayDate = d => new Date(y, m - 1, dd + d - 1);
+    const nDays = Math.max(trip.nDays || 1, ...nodes.map(n => n.day || 1));
+    const days = []; let totDist = 0, totDrive = 0;
+    for (let d = 1; d <= nDays; d++) days.push({n: d, date: dayDate(d), rows: [], dist: 0, drive: 0});
+    const cat = {}, dayCost = {}; let total = 0, missing = 0;
+    nodes.forEach((n, i) => {
+      const D = days[Math.min(nDays, Math.max(1, n.day || 1)) - 1], t = sc.times[i];
+      if (i > 0){
+        const L_ = legs[i - 1];
+        if (L_.kind !== 'noroute'){ D.dist += L_.dist; D.drive += L_.dur; totDist += L_.dist; totDrive += L_.dur; }
+        if (o.drive && L_.kind !== 'noroute' && L_.dist > 0.03) D.rows.push({t: 'leg', text: `${fmtDist(L_.dist)} · ${fmtDur(L_.dur)}` + (L_.kind === 'estimate' ? ' (rough estimate)' : '')});
+        if (o.drive) ((evp && evp.byLeg[i - 1]) || []).forEach(e => D.rows.push({t: 'leg', text: `⚡ Charge at ${e.c.name}: ${Math.round(e.arrive)}% → ${Math.round(e.to)}% · about ${fmtDur(e.mins)}`}));
+      }
+      if (n.type === 'start'){ D.rows.push({t: 'item', icon: '🏁', title: 'Start · ' + n.name, time: 'Leave ' + hm(t.dep)}); return; }
+      if (n.type === 'return'){ D.rows.push({t: 'item', icon: n.name === 'Back home' ? '🏠' : '↩', title: n.name, time: 'Arrive ' + hm(t.arr)}); return; }
+      const st = n.s, k = kindOf(st), K = KINDS[k], p = st.blank ? null : stopPlace(st);
+      if (k === 'note'){ D.rows.push({t: 'item', icon: K.icon, title: 'Note', memo: o.notes ? (st.text || '') : '', noTime: true}); return; }
+      let time;
+      if (k === 'sleep') time = (st.at ? 'Bed by ' + st.at + ' · ' : '') + 'Arrive ' + hm(t.arr);
+      else if (st.blank) time = 'Around ' + hm(t.start);
+      else time = (+st.stay > 0 && hm(t.arr) !== hm(t.dep)) ? `${hm(t.start)} – ${hm(t.dep)}` : 'Arrive ' + hm(t.arr);
+      const c = parseFloat(st.cost);
+      if (c > 0){ const lb = COST_CATS[k][0]; cat[lb] = (cat[lb] || 0) + c; dayCost[D.n] = (dayCost[D.n] || 0) + c; total += c; } else missing++;
+      D.rows.push({t: 'item', icon: K.icon, title: (k === 'visit' ? '' : K.label + ' · ') + (p ? p.name : (k === 'visit' ? 'Stop' : 'place to be decided')),
+        address: p ? (p.address || '') : '', maps: p ? `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}` : '', time,
+        memo: o.notes ? (st.memo || '') : '', photos: o.photos ? (((photoOwner(st) || {}).photos) || []).map(id => photoCache.get(id)).filter(Boolean) : [], cost: o.cost && c > 0 ? money(c) : '', late: t.late > 5 ? `You’d arrive ${fmtDur(t.late)} after your planned ${st.at}` : ''});
+    });
+    days.forEach(D => { D.label = D.date.toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long'}); D.summary = D.dist > 0 ? `${fmtDist(D.dist)} · ${fmtDur(D.drive)} driving` : ''; D.cost = o.cost && dayCost[D.n] ? money(dayCost[D.n]) : ''; });
+    const used = days.filter(D => D.rows.length);
+    const first = used[0], last = used[used.length - 1];
+    const fmtD = d => d.toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'});
+    const costs = o.cost && total ? {rows: Object.keys(cat).map(k => [k, money(cat[k])]), total: money(total), per: ppl > 1 ? money(total / ppl) : '', ppl, missing} : null;
+    return {title: (trip.title || '').trim() || 'My trip', range: first === last ? fmtD(first.date) : `${fmtD(first.date)} – ${fmtD(last.date)}`, days: used,
+      summary: `${used.length} day${used.length === 1 ? '' : 's'}` + (totDist > 0 ? ` · ${fmtDist(totDist)} · ${fmtDur(totDrive)} driving` : ''), costs};
+  }
+  function itineraryText(M){
+    const L = [M.title.toUpperCase(), `${M.range} · ${M.summary}`, ''];
+    M.days.forEach(D => {
+      L.push(`DAY ${D.n} — ${D.label}` + (D.summary ? ` (${D.summary})` : '') + (D.cost ? ` · ${D.cost}` : ''));
+      D.rows.forEach(r => {
+        if (r.t === 'leg'){ L.push(`      ${r.text.startsWith('⚡') ? '' : '🚗 '}${r.text}`); return; }
+        L.push(`${r.icon} ${r.title}${r.time ? '  —  ' + r.time : ''}${r.cost ? '  (' + r.cost + ')' : ''}`);
+        if (r.late) L.push('   ⚠️ ' + r.late);
+        if (r.address) L.push('   ' + r.address);
+        if (r.photos && r.photos.length) L.push(`   📷 ${r.photos.length} photo${r.photos.length === 1 ? '' : 's'} (in the page version)`);
+        if (r.maps) L.push('   Map: ' + r.maps);
+        if (r.memo) r.memo.split('\n').forEach(x => L.push('   ' + x));
+      });
+      L.push('');
+    });
+    if (M.costs){
+      L.push('COSTS'); M.costs.rows.forEach(([k, v]) => L.push(`${k}: ${v}`));
+      L.push(`Total: ${M.costs.total}` + (M.costs.missing ? ` (${M.costs.missing} item${M.costs.missing === 1 ? '' : 's'} without a cost)` : ''));
+      if (M.costs.per) L.push(`Per person (${M.costs.ppl}): ${M.costs.per}`);
+    }
+    return L.join('\n').trim() + '\n';
+  }
+  function memoHtml(text){
+    let out = '', last = 0; const re = /(?:https?:\/\/|www\.)[^\s<>"')\]]+/gi; let m;
+    while ((m = re.exec(text))){
+      out += esc(text.slice(last, m.index)); const u = m[0].replace(/[.,;:!?]+$/, ''), href = /^https?:/i.test(u) ? u : 'https://' + u;
+      out += `<a href="${esc(href)}">${esc(u)}</a>` + esc(m[0].slice(u.length)); last = m.index + m[0].length;
+    }
+    return (out + esc(text.slice(last))).replace(/\n/g, '<br>');
+  }
+  function itineraryHtml(M){
+    const css = `
+      *{box-sizing:border-box}
+      body{margin:0;background:#f3f4f6;color:#1f2328;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+      .wrap{max-width:680px;margin:0 auto;padding:0 14px 60px}
+      .cover{position:relative;color:#fff;border-radius:0 0 22px 22px;overflow:hidden;background:linear-gradient(135deg,#1f2937,#374151);min-height:150px;margin:0 -14px 6px}
+      .cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+      .cover:before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.15),rgba(0,0,0,.72));z-index:1}
+      .cover .in{position:relative;z-index:2;padding:70px 20px 20px}
+      .cover h1{margin:0;font-size:30px;line-height:1.15;text-shadow:0 1px 4px rgba(0,0,0,.45)}
+      .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+      .chip{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:3px 11px;font-size:13px;backdrop-filter:blur(4px)}
+      .day{margin-top:26px}
+      .dh{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 2px 10px}
+      .dh h2{margin:0;font-size:19px}.dh h2 span{display:inline-block;background:#1f2328;color:#fff;font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:2px 9px;border-radius:999px;margin-right:8px;vertical-align:2px}
+      .dh small{color:#6b7280;font-size:13px}
+      .tl{position:relative;padding-left:0}.tl>.card,.tl>.note,.tl>.mini{margin-bottom:10px}.tl>.leg+.card,.tl>.leg+.note,.tl>.leg+.mini{margin-top:0}
+      .card{background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 6px 16px rgba(0,0,0,.04);overflow:hidden;break-inside:avoid}
+      .hero{position:relative;height:200px;background:#cfd5dd}
+      .hero img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+      .hero:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.25) 0%,rgba(0,0,0,0) 38%,rgba(0,0,0,.72) 100%);pointer-events:none}
+      .hero .ht{position:absolute;left:14px;right:14px;bottom:12px;color:#fff;z-index:2;pointer-events:none}
+      .hero .ht b{display:block;font-size:20px;line-height:1.2;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+      .ico{position:absolute;top:10px;left:12px;z-index:2;background:rgba(255,255,255,.95);border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600}
+      .pill{position:absolute;top:10px;right:12px;z-index:2;background:#1f2328;color:#fff;border-radius:999px;padding:3px 11px;font-size:13px;font-weight:600}
+      .head{display:flex;gap:10px;align-items:center;padding:12px 14px 0}
+      .head .ic{width:34px;height:34px;border-radius:50%;background:#eef2f7;display:grid;place-items:center;font-size:17px;flex:none}
+      .head b{flex:1;font-size:16.5px;line-height:1.25}.head .pill2{background:#1f2328;color:#fff;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:600}
+      .body{padding:10px 14px 14px}
+      .time{display:inline-block;background:#eef4ff;color:#1d4ed8;border-radius:8px;padding:3px 10px;font-size:13.5px;font-weight:600}
+      .addr{margin-top:8px;color:#6b7280;font-size:13.5px}.addr a{color:#1d4ed8;text-decoration:none;font-weight:600;white-space:nowrap}
+      .warn{margin-top:8px;color:#b45309;background:#fff7e6;border-radius:8px;padding:5px 9px;font-size:13px}
+      .memo{margin-top:10px;background:#fffbe6;border:1px solid #f3e8a3;border-radius:10px;padding:8px 11px;font-size:14px;overflow-wrap:anywhere}
+      .memo a{color:#1d4ed8}
+      .pics{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.pics img{height:92px;width:auto;max-width:100%;border-radius:10px;display:block;cursor:zoom-in}
+      .leg{display:flex;align-items:center;gap:8px;margin:0 0 0 22px;padding:7px 0 7px 16px;border-left:3px dotted #b8c4d6;color:#2b4f8f;font-size:13px}
+      .leg.chg{color:#b45309;border-left-color:#f2c26b}
+      .note{background:#fffbe6;border:1px solid #f3e8a3;border-radius:16px;padding:12px 14px;break-inside:avoid}.note b{display:block;margin-bottom:2px}
+      .mini{display:flex;gap:10px;align-items:center;padding:10px 14px;background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+      .mini .ic{width:30px;height:30px;border-radius:50%;background:#eef2f7;display:grid;place-items:center;font-size:15px}.mini b{flex:1}.mini span{color:#374151;font-size:13.5px}
+      .costs{background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:12px 16px}
+      .costs table{width:100%;border-collapse:collapse}.costs td{padding:6px 0;border-bottom:1px solid #eef0f3}.costs td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+      .costs .tot td{font-weight:700;border-bottom:0;font-size:16px}
+      .foot{margin-top:34px;color:#9ca3af;font-size:12px;text-align:center}
+      #lb{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:9;cursor:zoom-out}#lb img{max-width:95vw;max-height:95vh;border-radius:8px}
+      @media print{body{background:#fff}.card,.mini,.costs{box-shadow:none;border:1px solid #e5e7eb}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.cover{border-radius:0}}`;
+    const allPics = M.days.flatMap(D => D.rows.flatMap(r => r.photos || []));
+    let h = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(M.title)}</title><style>${css}</style></head><body><div class="wrap">`;
+    h += `<div class="cover">${allPics[0] ? `<img src="${allPics[0]}" alt="">` : ''}<div class="in"><h1>${esc(M.title)}</h1><div class="chips"><span class="chip">📅 ${esc(M.range)}</span><span class="chip">${esc(M.summary)}</span></div></div></div>`;
+    M.days.forEach(D => {
+      h += `<div class="day"><div class="dh"><h2><span>Day ${D.n}</span>${esc(D.label)}</h2><small>${esc(D.summary)}${D.cost ? ' · ' + esc(D.cost) : ''}</small></div><div class="tl">`;
+      D.rows.forEach(r => {
+        if (r.t === 'leg'){ h += `<div class="leg${r.text.startsWith('⚡') ? ' chg' : ''}">${r.text.startsWith('⚡') ? '' : '🚗 '}${esc(r.text)}</div>`; return; }
+        if (r.noTime){ h += `<div class="note"><b>📝 Note</b>${memoHtml(r.memo || '')}</div>`; return; }
+        if (!r.address && !r.maps && !r.memo && !(r.photos && r.photos.length) && !r.cost && !r.late){
+          h += `<div class="mini"><span class="ic">${r.icon}</span><b>${esc(r.title)}</b><span>${esc(r.time || '')}</span></div>`; return;
+        }
+        const cover = r.photos && r.photos[0], rest = r.photos ? r.photos.slice(1) : [];
+        h += '<div class="card">' + (cover
+          ? `<div class="hero"><img src="${cover}" alt="" data-z><span class="ico">${r.icon}</span>${r.cost ? `<span class="pill">${esc(r.cost)}</span>` : ''}<div class="ht"><b>${esc(r.title)}</b></div></div>`
+          : `<div class="head"><span class="ic">${r.icon}</span><b>${esc(r.title)}</b>${r.cost ? `<span class="pill2">${esc(r.cost)}</span>` : ''}</div>`)
+          + '<div class="body">' + (r.time ? `<span class="time">${esc(r.time)}</span>` : '') + (r.late ? `<div class="warn">⚠️ ${esc(r.late)}</div>` : '')
+          + (r.address || r.maps ? `<div class="addr">${esc(r.address || '')}${r.address && r.maps ? ' · ' : ''}${r.maps ? `<a href="${esc(r.maps)}">Open in Maps ↗</a>` : ''}</div>` : '')
+          + (r.memo ? `<div class="memo">${memoHtml(r.memo)}</div>` : '')
+          + (rest.length ? `<div class="pics">${rest.map(u => `<img src="${u}" alt="" data-z>`).join('')}</div>` : '') + '</div></div>';
+      });
+      h += '</div></div>';
+    });
+    if (M.costs){
+      h += `<div class="day"><div class="dh"><h2><span>Costs</span></h2></div><div class="costs"><table>` + M.costs.rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')
+        + `<tr class="tot"><td>Total</td><td>${esc(M.costs.total)}</td></tr>` + (M.costs.per ? `<tr><td>Per person (${M.costs.ppl})</td><td>${esc(M.costs.per)}</td></tr>` : '') + '</table>'
+        + (M.costs.missing ? `<div style="color:#6b7280;font-size:13px;margin-top:6px">${M.costs.missing} item${M.costs.missing === 1 ? '' : 's'} without a cost, so this is a minimum.</div>` : '') + '</div></div>';
+    }
+    return h + `<div class="foot">Times are estimates from free-flow driving data and don’t include traffic. Made with Wanderlist.</div></div><script>document.addEventListener("click",function(e){var i=e.target;if(i.tagName==="IMG"&&i.hasAttribute("data-z")){var d=document.createElement("div");d.id="lb";d.innerHTML='<img src="'+i.src+'">';d.onclick=function(){d.remove()};document.body.appendChild(d)}});<\/script></body></html>`;
+  }
+  const shareOpts = () => ({drive: $('shDrive').checked, notes: $('shNotes').checked, cost: $('shCost').checked, photos: $('shPhotos').checked});
+  function shareModel(){ const M = buildItinerary(shareOpts()); if (M.error){ toast(M.error); return null; } return M; }
+  $('shTitle').addEventListener('input', e => { trip.title = e.target.value; saveTrip(); });
+  $('shCopy').onclick = async () => {
+    const M = shareModel(); if (!M) return; const txt = itineraryText(M);
+    try { await navigator.clipboard.writeText(txt); toast('Itinerary copied — paste it into a message or email'); }
+    catch(e){ const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch(_) {} ta.remove(); toast(ok ? 'Itinerary copied — paste it into a message or email' : 'Couldn’t copy automatically'); }
+  };
+  $('shHtml').onclick = () => {
+    const M = shareModel(); if (!M) return;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([itineraryHtml(M)], {type: 'text/html'}));
+    a.download = (M.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'itinerary') + '.html'; document.body.appendChild(a); a.click(); a.remove();
+    toast('Downloaded — send that file to anyone, it opens in any browser');
+  };
+  $('shPrint').onclick = () => {
+    const M = shareModel(); if (!M) return;
+    const w = window.open('', '_blank'); if (!w) return toast('Your browser blocked the pop-up — use “Download page” and print from there');
+    w.document.open(); w.document.write(itineraryHtml(M)); w.document.close(); w.focus(); setTimeout(() => { try { w.print(); } catch(e) {} }, 400);
+  };
+
+  function renderCosts(){
+    const cur = trip.cur || '$', ppl = Math.max(1, parseInt(trip.people) || 1);
+    const money = n => cur + (Number.isInteger(+n.toFixed(2)) ? Math.round(n).toLocaleString() : n.toFixed(2));
+    const cat = {}, day = {}; let total = 0, missing = 0;
+    trip.stops.forEach(st => {
+      const k = kindOf(st); if (k === 'note') return;
+      const c = parseFloat(st.cost);
+      if (!(c > 0)){ missing++; return; }
+      const label = COST_CATS[k][0], d = st.day || 1;
+      cat[label] = (cat[label] || 0) + c; day[d] = (day[d] || 0) + c; total += c;
+    });
+    document.querySelectorAll('[data-dc]').forEach(el => { const v = day[+el.dataset.dc]; el.textContent = v ? '💰 ' + money(v) : ''; });
+    const box = $('costTable'); if (!box) return;
+    if (!total){ box.innerHTML = `<div class="hint" style="padding:2px 0 6px">No costs entered yet.</div>`; return; }
+    let h = '<table>';
+    Object.keys(cat).forEach(k => { h += `<tr><td>${k}</td><td>${money(cat[k])}</td></tr>`; });
+    h += `<tr class="tot"><td>Total</td><td>${money(total)}</td></tr>`;
+    if (ppl > 1) h += `<tr class="tot"><td>Per person (${ppl})</td><td>${money(total / ppl)}</td></tr>`;
+    const days = Object.keys(day).map(Number).sort((a, b) => a - b);
+    if (days.length > 1) days.forEach(d => { h += `<tr class="sub"><td>Day ${d}</td><td>${money(day[d])}</td></tr>`; });
+    h += '</table>';
+    if (missing) h += `<div class="hint" style="margin-top:4px">${missing} block${missing === 1 ? ' has' : 's have'} no cost entered, so the total is a minimum.</div>`;
+    box.innerHTML = h;
+  }
+  function renderTimes(){
+    renderCosts();
+    const nodes = tripNodes(), ready = legsReady(nodes);
+    const evp = ready && nodes.length > 1 ? computeEV(nodes) : (lastPlan = null);
+    const evPending = !!(evp && evp.gap && evState.status === 'loading');
+    const sc = ready && nodes.length ? schedule(nodes, evp) : null;
+
+    document.querySelectorAll('[data-leg]').forEach(el => {
+      const idx = +el.dataset.leg, L_ = ready ? legs[idx] : null;
+      el.className = 'leg';
+      if (!L_){ el.textContent = 'Calculating route…'; return; }
+      let line;
+      if (L_.kind === 'road'){
+        line = `🚗 ${fmtDist(L_.dist)} · ${fmtDur(L_.dur)}` + (L_.dur > 300 ? '  ⚠ long drive' : '');
+        if (L_.dur > 300) el.classList.add('warn');
+      } else if (L_.kind === 'estimate'){
+        line = `≈ ${fmtDist(L_.dist)} · ${fmtDur(L_.dur)} (rough estimate: routing service unreachable)`;
+        el.classList.add('warn');
+      } else {
+        line = `⛴ No driving route (ferry or flight needed) · ${fmtDist(L_.dist)} straight line`;
+        el.classList.add('bad');
+      }
+      let extra = '';
+      if (evp){
+        (evp.byLeg[idx] || []).forEach(e => {
+          extra += `<div class="chg" data-lat="${e.c.lat}" data-lng="${e.c.lng}">⚡ <b>${esc(e.c.name)}</b>: ${Math.round(e.arrive)}% → ${Math.round(e.to)}% · ~${fmtDur(e.mins)}` +
+            (e.off > 0.3 ? ` · ${fmtDist(e.off)} off route` : '') + (e.c.kw ? ` · ${Math.round(e.c.kw)} kW` : '') + (e.c.kind === 'dc' ? ' · non-Tesla' : '') + `</div>`;
+        });
+        if (evp.gap && evp.gapLeg === idx && !evPending && evState.status !== 'error')
+          extra += `<div class="chg" style="background:#fde8e8;border-color:#f5b5b5;color:#9b1c1c;cursor:default">⚠ ${esc(evp.gapMsg)}</div>`;
+      }
+      el.innerHTML = esc(line) + extra;
+    });
+
+    const hm = d => d.toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'});
+    const dayIso = n => addDaysIso(trip.date, (n.day || 1) - 1);
+    document.querySelectorAll('[data-t]').forEach(el => {
+      const [k, i] = el.dataset.t.split(':'), e = sc && sc.times[+i], n = nodes[+i];
+      if (!e || !n){ el.textContent = '—'; return; }
+      const d = e[k];
+      el.textContent = hm(d) + (isoLocal(d) !== dayIso(n) ? ' · ' + d.toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'}) : '');
+    });
+    document.querySelectorAll('[data-m]').forEach(el => {
+      const i = +el.dataset.m, e = sc && sc.times[i], n = nodes[i];
+      if (!e || !n || n.type !== 'stop'){ el.hidden = true; return; }
+      if (e.late > 5){ el.hidden = false; el.className = 'wxl bad'; el.textContent = `⏰ You’d arrive ${fmtDur(e.late)} after your planned ${n.s.at}`; }
+      else if (e.start > e.arr){ el.hidden = false; el.className = 'wxl'; el.textContent = `⏳ Starts ${hm(e.start)} (${fmtDur((e.start - e.arr) / 60000)} wait)`; }
+      else el.hidden = true;
+    });
+    document.querySelectorAll('[data-dd]').forEach(el => {
+      const [y, m, dd] = trip.date.split('-').map(Number), d = +el.dataset.dd;
+      el.textContent = '· ' + new Date(y, m - 1, dd + d - 1).toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'short'});
+    });
+    const ds = {};
+    if (sc) nodes.forEach((n, i) => {
+      const d = n.day || 1, o = ds[d] || (ds[d] = {dist: 0, dur: 0, chg: 0, end: null});
+      if (i > 0){
+        const L_ = legs[i - 1];
+        if (L_.kind !== 'noroute'){ o.dist += L_.dist; o.dur += L_.dur; }
+        o.chg += evp && evp.byLeg[i - 1] ? evp.byLeg[i - 1].reduce((a, e) => a + e.mins + e.detourMin, 0) : 0;
+      }
+      const e = sc.times[i]; if (!o.end || e.dep > o.end) o.end = e.dep;
+    });
+    document.querySelectorAll('[data-ds]').forEach(el => {
+      const o = ds[+el.dataset.ds];
+      el.textContent = o && (o.dist > 0 || o.dur > 0) ? `🚗 ${fmtDist(o.dist)} · ${fmtDur(o.dur)}` + (o.chg ? ` · ⚡ +${fmtDur(o.chg)}` : '') + (o.end ? ` · until ${hm(o.end)}` : '') : '';
+    });
+
+    document.querySelectorAll('[data-b]').forEach(el => {
+      const [k, i] = el.dataset.b.split(':'), nb = evp && !evPending && evp.nodeBatt[+i];
+      if (!nb){ el.hidden = true; return; }
+      const v = nb[k]; el.hidden = false;
+      el.textContent = `🔋 ${Math.max(0, Math.round(v))}%`;
+      el.className = 'bt' + (v < car.reserve - 0.5 ? ' bad' : v < car.reserve + 8 ? ' low' : '');
+    });
+
+    tripSpan = sc ? {from: isoLocal(sc.times[0].arr), to: isoLocal(sc.times[sc.times.length - 1].arr)} : null;
+    document.querySelectorAll('[data-w]').forEach(el => {
+      const i = +el.dataset.w, n = nodes[i], e = sc && sc.times[i];
+      const arr = n && e && wx.status === 'ok' ? wx.days[wxKey(n)] : null;
+      const d = arr ? arr.find(x => x.date === isoLocal(e.arr)) : null;
+      if (!d){ el.hidden = true; return; }
+      const [ic, lab] = wmo(d.code), w = dayWarn(d);
+      el.hidden = false; el.title = lab; el.className = 'wxl' + (w ? ' bad' : '');
+      el.textContent = `${ic} ${tmp(d.tmax)}°/${tmp(d.tmin)}°` + (d.pop != null ? ` · 💧${d.pop}%` : '') + (w ? ` · ⚠ ${w}` : '');
+    });
+    renderWeather();
+
+    const S = $('summary');
+    if (nodes.length < 2){
+      S.innerHTML = `<div class="hint" style="padding:0">Add a start point and at least one stop (or two stops) to see drive times and a schedule.</div>`;
+    } else if (!sc){
+      S.innerHTML = `<div class="hint" style="padding:0">Calculating route…</div>`;
+    } else {
+      const end = sc.times[sc.times.length - 1].arr;
+      const days = Math.round((sod(end) - sod(lastT0)) / 864e5) + 1;
+      let h = `<div class="big">${fmtDist(sc.dist)} · ${fmtDur(sc.drive)} driving</div>
+        <small>${nodes.length - 1} leg${nodes.length - 1 === 1 ? '' : 's'} · ends ${esc(fmtT(end))} · spans ${days} day${days === 1 ? '' : 's'}</small>`;
+      if (evp){
+        const n = evp.events.length;
+        if (evp.gap && evState.status === 'loading') h += `<div class="warnline">🔎 Finding chargers along your route…</div>`;
+        else if (evp.gap && evState.status === 'error') h += `<div class="warnline">⚠ Couldn’t load charger data (${esc(evState.err)}). <button id="retryChg" type="button" style="padding:1px 8px;font-size:12px">Retry</button></div>`;
+        else if (evp.gap) h += `<div class="warnline" style="color:#9b1c1c">⚠ Not feasible with this battery: no reachable charger on part of the route. Raise the start battery, add a charging stop, or enable other DC chargers.</div>`;
+        else if (n) h += `<small>⚡ ${n} charging stop${n === 1 ? '' : 's'} · ~${fmtDur(sc.chargeMin)} added · arrive with ${Math.round(evp.finalPct)}%</small>`;
+        else h += `<small>✅ No charging needed · arrive with ${Math.round(evp.finalPct)}%</small>`;
+        if (evp.overcap) h += `<div class="warnline">One charging stop needs more than ${Math.min(100, car.chargeTo)}% (slower charging).</div>`;
+      } else if (!carSet()){
+        h += `<small>Add your car’s range under “Car &amp; battery” for charging suggestions.</small>`;
+      }
+      if (sc.noroute) h += `<div class="warnline">${sc.noroute} leg${sc.noroute === 1 ? ' has' : 's have'} no driving route (not counted above).</div>`;
+      if (sc.estimates) h += `<div class="warnline">${sc.estimates} leg${sc.estimates === 1 ? ' is a' : 's are'} rough straight-line estimate${sc.estimates === 1 ? '' : 's'} (routing server unreachable).</div>`;
+      if (sc.long) h += `<div class="warnline">${sc.long} drive${sc.long === 1 ? ' is' : 's are'} over 5 hours: consider an overnight stop.</div>`;
+      S.innerHTML = h;
+    }
+  }
+
+  // --- draw on map ---
+  function drawTrip(){
+    tripLayer.clearLayers();
+    const nodes = tripNodes(); if (!nodes.length) return;
+    if (legsReady(nodes)){
+      legs.forEach(l => L.polyline(l.geom, {
+        color: l.kind === 'noroute' ? '#6b7280' : '#2563eb', weight: 5, opacity: .85,
+        dashArray: l.kind === 'road' ? null : '6 8'
+      }).addTo(tripLayer));
+    }
+    if (lastPlan && lastPlan.usedChargers){
+      evState.proj.forEach(c => L.circleMarker([c.lat, c.lng], {radius: 4, color: '#b45309', weight: 1, fillColor: '#f59e0b', fillOpacity: .8})
+        .bindTooltip(esc(c.name) + (c.kw ? ' · ' + Math.round(c.kw) + ' kW' : '')).addTo(tripLayer));
+    }
+    if (lastPlan){
+      lastPlan.events.forEach(e => L.marker([e.c.lat, e.c.lng], {
+        icon: L.divIcon({className: '', html: '<span class="num zap">⚡</span>', iconSize: [28, 28], iconAnchor: [14, 14], tooltipAnchor: [16, 0]}),
+        zIndexOffset: 1200
+      }).bindTooltip(`${esc(e.c.name)}: ${Math.round(e.arrive)}% → ${Math.round(e.to)}%`, {direction: 'right'}).addTo(tripLayer));
+    }
+    let num = 0;
+    nodes.forEach(n => {
+      if (n.type === 'return' || n.blank) return;
+      const k = n.type === 'stop' ? kindOf(n.s) : null;
+      const lbl = n.type === 'start' ? 'S' : (k === 'visit' ? ++num : KINDS[k].icon);
+      L.marker([n.lat, n.lng], {icon: numIcon(lbl, n.type === 'start' ? '#2a9d8f' : KINDS[k].color), zIndexOffset: 1000})
+        .bindTooltip(esc(n.name), {direction: 'right'}).addTo(tripLayer);
+    });
+  }
+  function fitTrip(){
+    const pts = tripNodes().map(n => [n.lat, n.lng]);
+    if (legs) legs.forEach(l => l.geom.forEach(p => pts.push(p)));
+    if (!pts.length) return false;
+    map.fitBounds(L.latLngBounds(pts), {padding:[50,50], maxZoom:13});
+    return true;
+  }
+
+  // --- actions ---
+  function toggleTrip(id){
+    const i = trip.stops.findIndex(s => s.pid === id);
+    if (i >= 0) trip.stops.splice(i, 1); else pushStop(Object.assign({pid: id}, stopDefaults('visit')), panelOpts().day);
+    render(); refreshRoute(false);
+  }
+  function setStart(p){
+    trip.start = {name: p.name, address: p.address || '', lat: p.lat, lng: p.lng, fromHome: !!p.fromHome};
+    refreshRoute(true);
+    toast(`Start set: ${p.name}`);
+  }
+  function setHome(p){
+    home = {name: p.name, address: p.address || '', lat: p.lat, lng: p.lng};
+    saveHome(); drawHome();
+    $('homeDetails').open = false;
+    if (!trip.start) setStart({name: 'Home', address: home.name, lat: home.lat, lng: home.lng, fromHome: true});
+    else if (trip.start.fromHome){ trip.start.lat = home.lat; trip.start.lng = home.lng; trip.start.address = home.name; refreshRoute(true); }
+    else refreshRoute(false);
+    toast(`Home set: ${p.name}`);
+  }
+
+  // ----- days, meals & sleep -----
+  const stopDefaults = kind => ({kind, stay: KINDS[kind].stay, unit: 'h', at: ''});
+  function insertIndexForDay(day){ let idx = 0; trip.stops.forEach((x, k) => { if ((x.day || 1) <= day) idx = k + 1; }); return idx; }
+  function pushStop(entry, day){            // append to the end of a day
+    entry.day = day; trip.nDays = Math.max(trip.nDays || 1, day);
+    trip.stops.splice(insertIndexForDay(day), 0, entry);
+  }
+  function panelOpts(){                     // what the "Add to itinerary" panel is set to
+    const dv = $('stopDay').value, day = dv === 'new' ? (trip.nDays || 1) + 1 : (+dv || 1);
+    return {day, kind: $('stopKind').value || 'visit', at: $('stopAt').value || ''};
+  }
+  let fillSt = null;                         // the placeholder stop that the next chosen place will fill
+  function cancelFill(){ fillSt = null; $('fillNote').hidden = true; }
+  function startFill(st){
+    fillSt = st; const K = KINDS[kindOf(st)];
+    $('stopDetails').open = true; $('fillNote').hidden = false;
+    $('fillNote').innerHTML = `Choosing a place for <b>${K.icon} ${K.label}</b> (Day ${st.day || 1}) — search below, pick from your wishlist or the map. <a href="#" id="fillCancel">Cancel</a>`;
+    $('stopDetails').scrollIntoView({block: 'nearest', behavior: 'smooth'});
+  }
+  function fillWith(entry, label){
+    const st = fillSt; cancelFill();
+    delete st.blank; delete st.pid; delete st.place; Object.assign(st, entry);
+    if (kindOf(st) === 'charge') st.charge = true;
+    render(); refreshRoute(true); toast(`${KINDS[kindOf(st)].label} set to ${label}`);
+  }
+  function anchorExists(){ return !!(trip.start || home || trip.stops.some(st => !st.blank && stopPlace(st))); }
+  function addBlank(kind, day){
+    if (!anchorExists()) return toast('Set a start point (or home) or add a place first');
+    pushStop(Object.assign({blank: true}, stopDefaults(kind), kind === 'note' ? {text: ''} : {}), day);
+    render(); refreshRoute(true);
+    toast(kind === 'note' ? `Added a note to Day ${day}` : `Added ${KINDS[kind].label.toLowerCase()} to Day ${day} — choose a place later if you want`);
+    if (kind === 'note'){ const ta = document.querySelectorAll('#stops .node.k-note textarea'); const t = [...ta].find(x => !x.value); if (t) t.focus(); }
+  }
+  function addSamePlace(){
+    cancelFill();                  // e.g. lunch or sleep where you already are
+    const o = panelOpts(), idx = insertIndexForDay(o.day), prev = idx > 0 ? stopPlace(trip.stops[idx - 1]) : trip.start;
+    if (!prev) return toast('Add a start point or a place first');
+    pushStop(Object.assign({place: {name: prev.name, address: prev.address || '', lat: prev.lat, lng: prev.lng}}, stopDefaults(o.kind), {at: o.at}), o.day);
+    render(); refreshRoute(true);
+    toast(`Added ${KINDS[o.kind].label.toLowerCase()} at ${prev.name}`);
+  }
+  function moveToDay(i, d){
+    const [st] = trip.stops.splice(i, 1); st.day = d;
+    trip.stops.splice(insertIndexForDay(d), 0, st);
+    normalizeStops(); saveTrip(); refreshRoute(false);
+  }
+  function splitDayAfter(i){                // stops after this one move to the next day
+    const d = trip.stops[i].day || 1;
+    for (let k = i + 1; k < trip.stops.length; k++) trip.stops[k].day = (trip.stops[k].day || 1) + 1;
+    const ds = {}; Object.keys(trip.dayStart).forEach(k => { const n = +k; ds[n > d ? n + 1 : n] = trip.dayStart[k]; }); trip.dayStart = ds;
+    trip.nDays = (trip.nDays || 1) + 1;
+    normalizeStops(); saveTrip(); renderTrip(); drawTrip();
+    $('stopDay').value = String(d + 1);
+  }
+  function removeDay(d){                    // items move to the previous day
+    if (d <= 1) return;
+    trip.stops.forEach(st => { const sd = st.day || 1; if (sd === d) st.day = d - 1; else if (sd > d) st.day = sd - 1; });
+    const ds = {}; Object.keys(trip.dayStart).forEach(k => { const n = +k; if (n !== d) ds[n > d ? n - 1 : n] = trip.dayStart[k]; }); trip.dayStart = ds;
+    trip.nDays = Math.max(1, (trip.nDays || 1) - 1);
+    normalizeStops(); saveTrip(); renderTrip(); drawTrip();
+  }
+  function renderHomeRow(){
+    const el = $('homeRow'), active = trip.end !== 'last' && tripNodes().some(n => n.type === 'return');
+    if (active) el.innerHTML = `<div class="row tight"><span class="hint" style="padding:0">${trip.end === 'home' ? '🏠 Routing back home' : '↩ Routing back to the start'} at the end</span><button id="noReturn" type="button">Remove</button></div>`;
+    else if (home) el.innerHTML = `<button id="goHome" type="button" class="primary" style="width:100%">🏠 Route back home</button>`;
+    else if (trip.start) el.innerHTML = `<button id="goHome" type="button" class="primary" style="width:100%">↩ Route back to the start</button>`;
+    else el.innerHTML = `<div class="hint">Set a home or a start point to route back at the end.</div>`;
+  }
+
+  // Add a place to the trip. By default it is trip-only; `alsoWish` also saves it to the wishlist.
+  function addTripStop(p, alsoWish){
+    const near = (a, b) => Math.abs(a.lat - b.lat) < 1e-5 && Math.abs(a.lng - b.lng) < 1e-5;
+    if (fillSt){
+      const near0 = (a, b) => Math.abs(a.lat - b.lat) < 1e-5 && Math.abs(a.lng - b.lng) < 1e-5, on0 = places.find(x => near0(x, p));
+      if (on0) return fillWith({pid: on0.id}, p.name);
+      if (alsoWish) return fillWith({pid: addPlace(p).id}, p.name);
+      return fillWith({place: {name: p.name, address: p.address || '', lat: p.lat, lng: p.lng}}, p.name);
+    }
+    const o = panelOpts();
+    if (o.kind === 'visit' && trip.stops.some(st => { const q = stopPlace(st); return q && kindOf(st) === 'visit' && near(q, p); })){ toast('Already in your trip'); return; }
+    const onList = places.find(x => near(x, p));
+    let entry;
+    if (onList) entry = {pid: onList.id};
+    else if (alsoWish){ const pl = addPlace(p); entry = {pid: pl.id}; }
+    else entry = {place: {name: p.name, address: p.address || '', lat: p.lat, lng: p.lng}};
+    pushStop(Object.assign(entry, stopDefaults(o.kind), {at: o.at}, o.kind === 'charge' ? {charge: true} : {}), o.day);
+    render(); refreshRoute(true);
+    toast(`Added ${KINDS[o.kind].label.toLowerCase()} “${p.name}” to Day ${o.day}` + (onList || alsoWish ? '' : ' (trip only)'));
+  }
+  const addStopFromPlace = p => addTripStop(p, !!trip.alsoWish);
+
+  // Reusable "pick a location" widget: search, my location, click on map, or choose a wishlist place.
+  function pickerHTML(id, noWish){
+    return `<form class="row" id="${id}Form"><input type="text" id="${id}Q" placeholder="Search an address or place…" autocomplete="off" style="flex:1;min-width:0"><button type="submit">Search</button></form>
+      <ul class="results" id="${id}Results"></ul>
+      <div class="row tight" style="margin-top:6px"><button id="${id}Loc" type="button">📡 My location</button><button id="${id}Map" type="button">📌 Pick on map</button>${noWish ? '' : `<select id="${id}Wish"></select>`}</div>`;
+  }
+  function wirePicker(id, onSet, locName, btn){
+    $(id + 'Form').addEventListener('submit', e => {
+      e.preventDefault();
+      const q = $(id + 'Q').value.trim(); if (!q) return;
+      runSearch(q, $(id + 'Results'), btn || 'Use', pl => { $(id + 'Results').style.display = 'none'; $(id + 'Q').value = ''; onSet(pl); }, null);
+    });
+    $(id + 'Q').addEventListener('input', e => { if (!e.target.value) $(id + 'Results').style.display = 'none'; });
+    if ($(id + 'Wish')) $(id + 'Wish').onchange = e => {
+      const pl = placeById(e.target.value); e.target.value = '';
+      if (pl) onSet({name: pl.name, address: pl.address, lat: pl.lat, lng: pl.lng});
+    };
+    $(id + 'Loc').onclick = () => {
+      if (!navigator.geolocation) return toast('Location isn’t available in this browser');
+      toast('Finding your location…');
+      navigator.geolocation.getCurrentPosition(async pos => {
+        const lat = pos.coords.latitude, lng = pos.coords.longitude, r = await reverseName(lat, lng);
+        onSet({name: locName || (r && r.name) || 'My location', address: (r && r.address) || '', lat, lng});
+      }, err => toast('Couldn’t get your location: ' + err.message), {timeout: 10000});
+    };
+    $(id + 'Map').onclick = () => {
+      pickHandler = onSet; map.getContainer().style.cursor = 'crosshair';
+      toast(`Click the map to choose the ${id === 'home' ? 'home' : id === 'stop' ? 'stop' : id === 'chg' ? 'search' : 'start'} location`);
+    };
+  }
+  function refreshWishSelects(){
+    const opts = `<option value="">From wishlist…</option>` + places.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    ['start', 'home'].forEach(id => { if ($(id + 'Wish')) $(id + 'Wish').innerHTML = opts; });
+  }
+
+  $('addStopSel').onchange = e => {
+    const id = e.target.value; if (!id) return;
+    if (fillSt){ const pl = placeById(id); e.target.value = ''; return fillWith({pid: id}, pl ? pl.name : 'that place'); }
+    const o = panelOpts();
+    pushStop(Object.assign({pid: id}, stopDefaults(o.kind), {at: o.at}), o.day);
+    render(); refreshRoute(false);
+  };
+  $('addAll').onclick = () => {
+    const d = panelOpts().day;
+    places.filter(p => !inTrip(p.id)).forEach(p => pushStop(Object.assign({pid: p.id}, stopDefaults('visit')), d));
+    render(); refreshRoute(false);
+  };
+  $('samePlace').onclick = addSamePlace;
+  $('addBlank').onclick = () => { cancelFill(); const o = panelOpts(); addBlank(o.kind, o.day); };
+  $('fillNote').addEventListener('click', e => { if (e.target.id === 'fillCancel'){ e.preventDefault(); cancelFill(); } });
+  $('stopKind').addEventListener('change', renderTrip);
+  $('addDay').onclick = () => { trip.nDays = (trip.nDays || 1) + 1; saveTrip(); renderTrip(); $('stopDay').value = String(trip.nDays); };
+  $('homeRow').addEventListener('click', e => {
+    if (e.target.closest('#goHome')){
+      trip.end = home ? 'home' : 'start'; refreshRoute(true);
+      if (!tripNodes().some(n => n.type === 'return')) toast('Your last stop is already home');
+      else toast(home ? 'Routing back home at the end' : 'Routing back to the start at the end');
+    }
+    if (e.target.closest('#noReturn')){ trip.end = 'last'; refreshRoute(false); }
+  });
+  $('startBox').addEventListener('click', e => {
+    if (e.target.closest('#clearStart')){ trip.start = null; refreshRoute(false); }
+    if (e.target.closest('#useHome') && home) setStart({name: 'Home', address: home.name, lat: home.lat, lng: home.lng, fromHome: true});
+  });
+
+  $('homeBox').addEventListener('click', e => {
+    if (!e.target.closest('#clearHome')) return;
+    home = null; saveHome(); drawHome();
+    if (trip.start && trip.start.fromHome) trip.start.fromHome = false;
+    if (trip.end === 'home') trip.end = 'start';
+    $('homeDetails').open = true;
+    refreshRoute(false);
+  });
+  $('wxLoc').addEventListener('change', e => { wxLoc = e.target.value; renderWeather(); });
+  $('wxNote').addEventListener('click', e => {
+    if (!e.target.closest('#retryWx')) return;
+    wx.key = ''; ensureWeather(); renderWeather();
+  });
+  $('summary').addEventListener('click', e => {
+    if (!e.target.closest('#retryChg')) return;
+    chargerCache.delete(evState.key); evState.key = ''; refreshPlanView();
+  });
+  $('stops').addEventListener('click', e => {
+    const ch = e.target.closest('.chg');
+    if (ch && ch.dataset.lat){ map.flyTo([+ch.dataset.lat, +ch.dataset.lng], Math.max(map.getZoom(), 12), {duration: .8}); return; }
+    const dact = e.target.closest('[data-dact]');
+    if (dact){
+      const d = +dact.dataset.d;
+      if (dact.dataset.dact === 'findchg'){
+        const ns = tripNodes().filter(n => n.type !== 'return' && (n.day || 1) <= d), at = ns.length ? ns[ns.length - 1] : home;
+        chgDayPref = d; showTab('chg');
+        if (at) searchChargers({name: d > 0 && ns.length ? `where Day ${d} ends` : 'home', lat: at.lat, lng: at.lng}); else toast('Add a start point or a stop first');
+        return;
+      }
+      if (dact.dataset.dact === 'addk'){
+        addBlank(dact.dataset.k, d);
+      } else if (dact.dataset.dact === 'delday') removeDay(d);
+      return;
+    }
+    const node = e.target.closest('.node'); if (!node) return;
+    const act = e.target.closest('[data-act]');
+    const i = node.dataset.si === undefined ? -1 : +node.dataset.si;
+    if (act && act.dataset.act === 'up' && i > 0 && (trip.stops[i - 1].day || 1) === (trip.stops[i].day || 1)){ [trip.stops[i-1], trip.stops[i]] = [trip.stops[i], trip.stops[i-1]]; render(); return refreshRoute(false); }
+    if (act && act.dataset.act === 'down' && i < trip.stops.length - 1 && (trip.stops[i + 1].day || 1) === (trip.stops[i].day || 1)){ [trip.stops[i+1], trip.stops[i]] = [trip.stops[i], trip.stops[i+1]]; render(); return refreshRoute(false); }
+    if (act && act.dataset.act === 'save' && trip.stops[i] && trip.stops[i].place){
+      const st = trip.stops[i], pl = addPlace(st.place);
+      st.pid = pl.id; delete st.place; saveTrip(); render(); return refreshRoute(false);
+    }
+    if (act && act.dataset.act === 'memoopen'){ const m = act.closest('.memo'), ta = m.querySelector('textarea'); ta.hidden = false; act.remove(); return ta.focus(); }
+    if (act && act.dataset.act === 'fill' && trip.stops[i]) return startFill(trip.stops[i]);
+    if (act && act.dataset.act === 'findchg' && trip.stops[i]){
+      chgDayPref = trip.stops[i].day || 1; chgFillPref = trip.stops[i]; showTab('chg');
+      return searchChargers({name: 'this stop', lat: +node.dataset.lat, lng: +node.dataset.lng});
+    }
+    if (act && act.dataset.act === 'rmreturn'){ trip.end = 'last'; return refreshRoute(false); }
+    if (act && act.dataset.act === 'split' && i >= 0) return splitDayAfter(i);
+    if (act && act.dataset.act === 'rm'){ if (fillSt === trip.stops[i]) cancelFill(); trip.stops.splice(i, 1); render(); return refreshRoute(false); }
+    if (e.target.closest('input,select,button,textarea,.heroimg,.ph img')) return;
+    map.flyTo([+node.dataset.lat, +node.dataset.lng], Math.max(map.getZoom(), 11), {duration:.8});
+  });
+  $('stops').addEventListener('input', e => {
+    if (e.target.dataset.dact === 'dstart'){
+      if (e.target.value){ trip.dayStart[+e.target.dataset.d] = e.target.value; saveTrip(); renderTimes(); }
+      return;
+    }
+    const act = e.target.dataset.act; if (act !== 'stay' && act !== 'at' && act !== 'text' && act !== 'cost' && act !== 'memo') return;
+    const node = e.target.closest('.node'), st = trip.stops[+node.dataset.si]; if (!st) return;
+    if (act === 'text' || act === 'memo'){ if (act === 'text') st.text = e.target.value; else st.memo = e.target.value; saveTrip(); const m = e.target.closest('.memo'); if (m) m.querySelector('.mlinks').innerHTML = linkChips(e.target.value); return; }
+    if (act === 'cost'){ st.cost = e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0); saveTrip(); return renderCosts(); }
+    if (act === 'stay') st.stay = Math.max(0, parseFloat(e.target.value) || 0); else st.at = e.target.value || '';
+    saveTrip(); renderTimes();
+  });
+  $('stops').addEventListener('change', e => {
+    const act = e.target.dataset.act;
+    if (act !== 'kind' && act !== 'day' && act !== 'chg') return;
+    const node = e.target.closest('.node'), st = trip.stops[+node.dataset.si]; if (!st) return;
+    if (act === 'chg'){ st.charge = e.target.checked; saveTrip(); return refreshPlanView(); }
+    if (act === 'kind'){
+      const old = kindOf(st); st.kind = e.target.value;
+      if (+st.stay === KINDS[old].stay) st.stay = KINDS[st.kind].stay;
+      saveTrip(); renderTrip(); return drawTrip();
+    }
+    moveToDay(+node.dataset.si, +e.target.value);
+  });
+
+  $('tDate').addEventListener('input', e => { if (e.target.value){ trip.date = e.target.value; saveTrip(); renderTimes(); } });
+  $('tTime').addEventListener('input', e => { if (e.target.value){ trip.time = e.target.value; saveTrip(); renderTrip(); } });
+  $('costCur').addEventListener('input', e => { trip.cur = e.target.value || '$'; saveTrip(); renderCosts(); });
+  $('costCur').addEventListener('change', () => renderTrip());
+  $('costPeople').addEventListener('input', e => { trip.people = Math.max(1, parseInt(e.target.value) || 1); saveTrip(); renderCosts(); });
+  $('tUnits').addEventListener('change', e => { trip.units = e.target.value; saveTrip(); syncCarUI(); renderTimes(); });
+  $('alsoWish').addEventListener('change', e => { trip.alsoWish = e.target.checked; saveTrip(); });
+  $('tEnd').addEventListener('change', e => { trip.end = e.target.value; refreshRoute(false); });
+
+  // ---------- car & battery ----------
+  // Approximate EPA-style rated ranges in km (sources disagree by year/trim: treat as a starting point).
+  const PRESETS = [
+    ['m3std', 'Model 3 · Standard / RWD', 515], ['m3lr', 'Model 3 · Long Range', 565], ['m3p', 'Model 3 · Performance', 480],
+    ['myst', 'Model Y · Standard / RWD', 515], ['mylr', 'Model Y · Long Range', 545], ['myp', 'Model Y · Performance', 490],
+    ['ms', 'Model S', 640], ['mx', 'Model X', 540], ['ct', 'Cybertruck', 520]
+  ];
+  function updateCarSummary(){
+    const pr = PRESETS.find(x => x[0] === car.model);
+    $('carSummary').textContent = carSet() ? '· ' + (pr ? pr[1] : 'custom') + ', ' + fmtDist(car.rangeKm) + ' rated' : '· not set';
+  }
+  function syncCarUI(){
+    const f = trip.units === 'mi' ? 0.621371 : 1;
+    $('carModel').value = car.model || '';
+    $('carRange').value = car.rangeKm ? Math.round(car.rangeKm * f) : '';
+    $('carUnit').textContent = trip.units === 'mi' ? 'mi' : 'km';
+    $('carFactor').value = Math.round(car.factor * 100); $('carFactorV').textContent = Math.round(car.factor * 100) + '%';
+    $('startPct').value = trip.startPct; $('startPctV').textContent = trip.startPct + '%';
+    $('reservePct').value = car.reserve; $('chargeTo').value = car.chargeTo; $('inclDC').checked = !!car.includeDC;
+    updateCarSummary();
+  }
+  function initCarUI(){
+    $('carModel').innerHTML = '<option value="">Choose your Tesla…</option>' + PRESETS.map(x => `<option value="${x[0]}">${x[1]}</option>`).join('') + '<option value="custom">Other / custom</option>';
+    syncCarUI(); $('carBox').open = !carSet();
+  }
+  $('carModel').addEventListener('change', e => {
+    car.model = e.target.value;
+    const pr = PRESETS.find(x => x[0] === car.model); if (pr) car.rangeKm = pr[2];
+    saveCar(); syncCarUI(); renderTrip(); drawTrip();
+  });
+  $('carRange').addEventListener('input', e => {
+    const f = trip.units === 'mi' ? 0.621371 : 1, v = parseFloat(e.target.value);
+    const wasSet = carSet();
+    car.rangeKm = v > 0 ? v / f : 0;
+    const pr = PRESETS.find(x => x[0] === car.model);
+    if (pr && Math.abs(pr[2] - car.rangeKm) > 1){ car.model = 'custom'; $('carModel').value = 'custom'; }
+    saveCar(); updateCarSummary();
+    if (wasSet !== carSet()){ renderTrip(); } else renderTimes();
+    drawTrip();
+  });
+  $('carFactor').addEventListener('input', e => { car.factor = e.target.value / 100; $('carFactorV').textContent = e.target.value + '%'; saveCar(); refreshPlanView(); });
+  $('startPct').addEventListener('input', e => { trip.startPct = +e.target.value; $('startPctV').textContent = e.target.value + '%'; saveTrip(); refreshPlanView(); });
+  $('reservePct').addEventListener('input', e => { car.reserve = Math.min(50, Math.max(0, parseFloat(e.target.value) || 0)); saveCar(); refreshPlanView(); });
+  $('chargeTo').addEventListener('input', e => { car.chargeTo = Math.min(100, Math.max(50, parseFloat(e.target.value) || 80)); saveCar(); refreshPlanView(); });
+  $('inclDC').addEventListener('change', e => { car.includeDC = e.target.checked; saveCar(); refreshPlanView(); });
+
+  $('optimize').onclick = () => {
+    if ((trip.nDays || 1) > 1 || trip.stops.some(st => kindOf(st) !== 'visit' || st.blank))
+      return toast('Optimize only works on a single day of places. Your multi-day / meal / sleep plan is left as you made it.');
+    const items = trip.stops.map(s => ({s, p: stopPlace(s)})).filter(x => x.p);
+    if (items.length < 2) return toast('Add at least two stops to optimize');
+    const start = trip.start || {lat: items[0].p.lat, lng: items[0].p.lng};
+    const rest = trip.start ? items : items.slice(1);
+    const endPt = trip.end === 'start' ? start : (trip.end === 'home' && home ? home : null);
+    const ord = bestOrder(start, rest.map(x => x.p), endPt);
+    const reordered = ord.map(i => rest[i].s);
+    trip.stops = trip.start ? reordered : [items[0].s, ...reordered];
+    render(); refreshRoute(true);
+    toast(trip.start ? 'Reordered for the shortest overall distance' : 'Reordered (first stop kept as the start)');
+  };
+
+  $('gmaps').onclick = () => {
+    const nodes = tripNodes();
+    if (nodes.length < 2) return toast('Add a start and at least one stop first');
+    const f = n => `${n.lat},${n.lng}`;
+    let mid = nodes.slice(1, -1);
+    if (mid.length > 9){ mid = mid.slice(0, 9); toast('Google Maps links support up to 9 middle stops; extras were left out'); }
+    const url = `https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=${encodeURIComponent(f(nodes[0]))}&destination=${encodeURIComponent(f(nodes[nodes.length - 1]))}` +
+      (mid.length ? `&waypoints=${encodeURIComponent(mid.map(f).join('|'))}` : '');
+    window.open(url, '_blank', 'noopener');
+  };
+
+  $('clearTrip').onclick = () => {
+    if (!trip.start && !trip.stops.length) return;
+    if (!confirm('Clear the start point and all stops from this trip? (Your wishlist is not affected.)')) return;
+    trip.start = null; trip.stops = []; trip.nDays = 1; trip.dayStart = {}; render(); refreshRoute(false);
+  };
+
+  // --- tabs ---
+  // ---------- charger finder ----------
+  // Tesla's published list of NZ destination chargers (hotels, motels, car parks…): n = name, a = address, p = phone.
+  // These are slow AC chargers meant for overnight stays, not Superchargers. Coordinates are looked up once in your browser and cached.
+  const NZ_DEST = [{"n":"Alpine Rose Motel","a":"139 High St, Greymouth, NZ 7805","p":"+64 3 768 7586"},{"n":"Anchorage Motel & Apartments","a":"47 Quintin Drive, Te Anau, Waikato 9600","p":"+64 3 249 7256"},{"n":"Anglesea Motel","a":"36 Liverpool St, Hamilton, NZ 3204","p":"+64 7 834 0010"},{"n":"Aro Ha Wellness Retreat","a":"33 Station Valley Rd, Glenorchy, NZ 9350","p":"+64 3 442 7011"},{"n":"Ascot Park Hotel","a":"Corner Tay Street & Racecourse Road, Invercargill, NZ 9810","p":"+64 3 219 9076"},{"n":"Ashwood Manor","a":"16 Thackeray St, Hamilton Lake, NZ 3204","p":"+64 7 838 3845"},{"n":"Aston Norwood Cafe","a":"1747 Main Road North, Upper Hutt, Wellington 5018","p":"+64 4 526 6639"},{"n":"Black Swan Boutique Hotel","a":"171 Kawaha Point Road, Kawaha Point, Rotorua, North Island 3010","p":"+64 7 3463 602"},{"n":"Bolton Hotel","a":"12 Bolton St, Wellington, NZ 6011","p":"+64 4 472 9966"},{"n":"Brinkley Resort","a":"43 Barkers Road, Methven 7730","p":"+64 3 302 8885"},{"n":"Britomart Carpark","a":"130 Quay St, Auckland, Auckland 1140","p":"+64 800 005 431"},{"n":"Camp Glenorchy Eco Retreat","a":"42 Oban Street, Otago, South Island 9372","p":"+64 3 401 0401"},{"n":"Cardrona Hotel","a":"Cardrona Valley Rd, Cardrona, NZ 9381","p":"+64 3 443 8153"},{"n":"Cheviot Park Motor Lodge","a":"Cnr Western Hills Drive & Cheviot Street, Whangarei 0110","p":"+64 9 438 2341"},{"n":"CityLife Wellington","a":"14 Gilmer Terrace, Wellington 6011","p":"+64 4 922 2800"},{"n":"Clarence Hotel and Bistro","a":"51 Willow street, Tauranga 3110","p":"+64 7 574 8200"},{"n":"Coleraine Suites and Apartments","a":"61 High Street, Greymouth, NZ 7805","p":"+64 3 768 0077"},{"n":"Commodore Hotel","a":"449 Memorial Ave, Burnside, NZ 8053","p":"+64 3 358 8129"},{"n":"Coronet Peak Ski Area","a":"Coronet Peak Ski Area, Skippers Road, Queenstown, NZ 9300","p":"+64 3 450 1970"},{"n":"CQ Hotel Wellington","a":"223 Cuba Street, Te Aro, Wellington 6011","p":"+64 4 385 2156"},{"n":"Edgewater","a":"54 Sargood Drive, Wanaka, NZ 9305","p":"+64 3 443 0011"},{"n":"eMotel","a":"120 Roberts Street, Taupo, Bay of Plenty 3333","p":"+64 7 378 8569"},{"n":"Excelsa Suburban Centre","a":"1194 Papamoa Beach Road, Papamoa Beach 3118","p":"+64 7 542 0815"},{"n":"Fino Hotel & Suites","a":"87 Kilmore Street, Christchurch, NZ 8013","p":"+64 3 550 0501"},{"n":"Grand Mercure Wellington","a":"345 The Terrace, Wellington 6001","p":"+64 4 385 9829"},{"n":"Grand Millennium Auckland","a":"71 Mayoral Dr, Auckland, NZ 1010","p":"+64 9 366 3000"},{"n":"Hacienda Motor Lodge","a":"27 Victoria Avenue, Palmerston North, North Island 4410","p":"+64 6 357 3109"},{"n":"Heartland Hotel Auckland","a":"14 Airpark Drive, Auckland 2022","p":"+64 9 402 7826"},{"n":"Heartland Hotel Fox Glacier","a":"11 Cook Flat Road, Fox Glacier 7886","p":"+64 3 751 0839"},{"n":"Heartland Hotel Haast","a":"26 Jackson Bay Road, Haast, NZ 7886","p":"+64 3 750 0828"},{"n":"Highfield Mews","a":"26 Exe St, Oamaru, NZ 9400","p":"+64 3 434 3437"},{"n":"Hotel St Moritz Queenstown - MGallery","a":"10/18 Brunswick Street, Queenstown, Otago 9300","p":"+64 3 442 4990"},{"n":"Huka Lodge","a":"271 Huka Falls Road, Taupo 3377","p":"+64 7 378 5791"},{"n":"Ibis Rotorua","a":"Lake End Rangiuru Street, Rotorua 3010","p":"+64 7 346 3999"},{"n":"InterContinental Wellington","a":"2 Grey Street, Wellington, NZ 6011","p":"+64 4 472 2722"},{"n":"Jacks Point Restaurant","a":"94 Mcadam Dr, Kawarau Falls, South Island 9371","p":"+61 3 450 2050"},{"n":"King & Queen Hotel Suites","a":"Corner of King and Queen Streets, New Plymouth 4310","p":"+64 6 757 2999"},{"n":"Kings on Peace Apartments","a":"4 Peace St, Fenton Park, Rotorua 3010","p":"+64 800 508 246"},{"n":"Lake Front Lodge Taupo","a":"100 Lake Terrace, Taupō, Waikato 3330","p":"+64 7 376 0116"},{"n":"Leigh Central Motel","a":"22 - 28 Cumberland St, Leigh, NZ 985","p":"+64 9 422 6070"},{"n":"Murchison Lodge","a":"15 Grey Street, Murchison 7007","p":"+64 3 523 9196"},{"n":"Naumi Auckland Airport Hotel","a":"149 Kirkbride Rd, Mangere, Auckland 2022","p":"+64 9 912 3333"},{"n":"Navigate Seaside Hotel & Apartments","a":"50 Waghorne St, Napier, NZ 4110","p":"+64 6 831 0077"},{"n":"Novotel Wellington","a":"133 The Terrace, Wellington 6140","p":"+64 4 918 1900"},{"n":"Ohakune Holiday Homes","a":"30C Snowmass Drive, Ohakune, Auckland 4625","p":"+64 27 490 9712"},{"n":"Orakei Korako Cave & Thermal Park","a":"494 Orakeikorako Road, Reporoa, Bay of Plenty 3083","p":"+61 7 378 3131"},{"n":"Queenstown Ice Arena","a":"29 Park Street, Queenstown Gardens, Otago, NZ 9300","p":"+64 3 441 8000"},{"n":"Regal Palms Resort","a":"350 Fenton St, Rotorua, North Island 3010","p":"+64 7 350 3232"},{"n":"Royal Mail Hotel NZ","a":"151 Flora Road, Lumsden, South Island 9730","p":"+64 2 2597 7657"},{"n":"Rydges Latimer Christchurch","a":"30 Latimer Square, Christchurch Central, NZ 8011","p":"+64 3 379 6760"},{"n":"Scenic Hotel Bay of Islands","a":"58 Seaview Road, Paihia 0200","p":"+64 9 402 7826"},{"n":"Scenic Hotel Southern Cross","a":"118 High Street, Dunedin 9016","p":"+64 3477 0752"},{"n":"Scenic Suites Queenstown","a":"27 Stanley Street, Queenstown 9300","p":"+64 3 442 4718"},{"n":"Sherwood","a":"554 Frankton Rd, Queenstown, NZ 9348","p":"+64 3 450 1090"},{"n":"SOHO Hotel","a":"180 Stoddard Road, Mt Roskill, Auckland 1041","p":"09 320 1796"},{"n":"Sports of Kings Motel","a":"6 Peace Street Fenton Park, Rotorua, NZ 3010","p":"+64 7 348 2135"},{"n":"Stoneridge Estate","a":"756 State Highway 6, Queenstown, NZ 9371","p":"+64 3-442 1021"},{"n":"Taupo DeBretts","a":"76 Napier-Taupo, Taupo, NZ 3330","p":"+64 7 378 8559"},{"n":"Taylor's Motel","a":"770 East Street, Ashburton 7700","p":"+61 3 308 9119"},{"n":"Te Kairanga Winery","a":"Martins Road, Martinborough 5954","p":"+64 6 306 9122"},{"n":"Te Waonui Forest Retreat","a":"3 Wallace Street, Franz Josef Glacier 7886","p":"+64 3 752 0555"},{"n":"Next Gen Auckland","a":"1 Tennis Lane, Parnell, Auckland 1010","p":"+64 800 639 843"},{"n":"Te Mata Lodge Motel","a":"21 Porter Drive, Havelock North, Hawke’sBay 4130","p":""},{"n":"Queenstown Airport","a":"- Sir Henry Wigley Drive, Frankton, Otago 9300","p":"+64 3 450 9031"},{"n":"The Devon Hotel-New Plymouth","a":"390 Devon Street East, New Plymouth, Taranaki 4312","p":"+64 6 759 9099"},{"n":"The George Christchurch","a":"50 Park Ter, Christchurch Central, NZ 8013","p":"+64 3 379 4560"},{"n":"The Golf Warehouse Driving Range - Takapuna","a":"37 Fred Thomas Drive, Takapuna 0622 0622","p":"+64 9 489 5374"},{"n":"The Rees Hotel","a":"377 Frankton Rd, Queenstown, NZ 9300","p":"+64 3 450 1100"},{"n":"The State Hotel","a":"162 Devon Street, East New Plymouth, Taranaki, NZ 4310","p":"+64 6 757 5162"},{"n":"The Victoria Hotel Dunedin","a":"137 St Andrew Street, Dunedin, NZ 9016","p":"+64 3 477 0572"},{"n":"Waiomu Beach Café","a":"622 Thames Coast Rd, Tapu, NZ 3575","p":"+64 7 868 2554"},{"n":"Wairakei Resort","a":"640 Wairakei Dr, Taupo, NZ 3330","p":"+64 7 374 9004"},{"n":"Auckland, New Zealand - Wynyard Carpark","a":"110 Pakenham St W, Auckland, Auckland 1010","p":"+64 9 300 6190"}];
+  // Tesla's published list of NZ Superchargers: n = site name, a = address, u = Tesla's page. Coordinates are looked up once and cached.
+  const NZ_SC = [{"n":"Auckland South","a":"147 Kirkbride Rd, Auckland, Auckland 2022","u":"https://www.tesla.com/en_GB/findus/location/supercharger/445609"},{"n":"Blenheim","a":"2 Park Terrace, Blenheim, Marlborough 7201","u":"https://www.tesla.com/en_GB/findus/location/supercharger/blenheimsupercharger"},{"n":"Botany","a":"588 Chapel Rd, Auckland 2013","u":"https://www.tesla.com/en_GB/findus/location/supercharger/31691"},{"n":"Bulls","a":"113 Bridge Street, Bulls, Manawatu-Wanganui 4818","u":"https://www.tesla.com/en_GB/findus/location/supercharger/bullssupercharger"},{"n":"Christchurch","a":"50 Park Terrace, Christchurch Central, Christchurch 8013","u":"https://www.tesla.com/en_GB/findus/location/supercharger/christchurchnzsupercharger"},{"n":"Dunedin","a":"49 Timaru Street, Dunedin, Otago 9012","u":"https://www.tesla.com/en_GB/findus/location/supercharger/31687"},{"n":"Epsom","a":"245 Green Lane West, Epsom, Auckland 1023","u":"https://www.tesla.com/en_GB/findus/location/supercharger/34180"},{"n":"Hamilton","a":"Te Rapa Road, Hamilton 3200","u":"https://www.tesla.com/en_GB/findus/location/supercharger/hamiltonsupercharger"},{"n":"Hastings","a":"248 State Highway 51, Mangateretere 4180","u":"https://www.tesla.com/en_GB/findus/location/supercharger/hastingssupercharger"},{"n":"Hornby","a":"418 Main South Road, Hornby, Canterbury 8441","u":"https://www.tesla.com/en_GB/findus/location/supercharger/33954"},{"n":"Kaikoura","a":"105 Beach Rd, Kaikōura, Canterbury 7300","u":"https://www.tesla.com/en_GB/findus/location/supercharger/kaikourasupercharger"},{"n":"Mangaweka","a":"2 Koraenui St, Mangaweka 4797","u":"https://www.tesla.com/en_GB/findus/location/supercharger/mangawekasupercharger"},{"n":"Nelson","a":"99 Quarantine Road, Nelson, Nelson 7020","u":"https://www.tesla.com/en_GB/findus/location/supercharger/58678"},{"n":"New Plymouth","a":"48 Hobson Street, New Plymouth, Taranaki 4310","u":"https://www.tesla.com/en_GB/findus/location/supercharger/newplymouthsupercharger"},{"n":"Omarama","a":"29 Omarama Ave, Omarama 9448","u":"https://www.tesla.com/en_GB/findus/location/supercharger/omaramanzsupercharger"},{"n":"Palmerston North","a":"84 The Square, Palmerston North 4410","u":"https://www.tesla.com/en_GB/findus/location/supercharger/palmerstonnorthsupercharger"},{"n":"Paraparaumu","a":"150 Coastlands Parade, Paraparaumu, Wellington 5032","u":"https://www.tesla.com/en_GB/findus/location/supercharger/paraparaumusupercharger"},{"n":"Queenstown","a":"Hawthorne Dr, Frankton, Queenstown 9300","u":"https://www.tesla.com/en_GB/findus/location/supercharger/queenstownnzsupercharger"},{"n":"Rainbow Point","a":"1-16 Kokomea Village Drive Lake Terrace, Taupo, Waikato 1010","u":"https://www.tesla.com/en_GB/findus/location/supercharger/rainbowpointsupercharger"},{"n":"Rotorua","a":"1170 Amohau Street, Rotorua, Bay of Plenty 3010","u":"https://www.tesla.com/en_GB/findus/location/supercharger/rotoruasupercharger"},{"n":"Ruakura","a":"11 Davison Road, Newstead, Waikato 3286","u":"https://www.tesla.com/en_GB/findus/location/supercharger/ruakurasupercharger"},{"n":"Sylvia Park","a":"Stud Way, Mount Wellington, Auckland 1060","u":"https://www.tesla.com/en_GB/findus/location/supercharger/aucklandsylviaparksupercharger"},{"n":"Taihape","a":"21 Mataroa Road, Taihape, Manawatu-Wanganui 4720","u":"https://www.tesla.com/en_GB/findus/location/supercharger/taihapesupercharger"},{"n":"Taupo","a":"1 Kaimanawa Street, Taupo, Waikato 3330","u":"https://www.tesla.com/en_GB/findus/location/supercharger/tauposupercharger"},{"n":"Glenfield","a":"40 Downing Street, Glenfield, Auckland 0629","u":"https://www.tesla.com/en_GB/findus/location/supercharger/26780"},{"n":"Timaru","a":"223 Hilton Highway, Washdyke, Timaru 7910","u":"https://www.tesla.com/en_GB/findus/location/supercharger/geraldinenzsupercharger"},{"n":"Waipapa","a":"12 Klinac Ln, Waipapa, Northland 0295","u":"https://www.tesla.com/en_GB/findus/location/supercharger/33946"},{"n":"Waitomo","a":"584 State Highway 3, Waitomo Caves, Waikato 3977","u":"https://www.tesla.com/en_GB/findus/location/supercharger/waitomosupercharger"},{"n":"Johnsonville","a":"31 Johnsonville Road, Johnsonville, Wellington 6037","u":"https://www.tesla.com/en_GB/findus/location/supercharger/wellingtonsupercharger"},{"n":"Westgate","a":"33-47 Northside Drive, Westgate, Auckland 0814","u":"https://www.tesla.com/en_GB/findus/location/supercharger/59363"},{"n":"Whakatane","a":"3 Phoenix Drive, Whakatane, Bay of Plenty 3120","u":"https://www.tesla.com/en_GB/findus/location/supercharger/whakatanesupercharger"},{"n":"Whangarei","a":"7 Rust Ave, Whangarei 0140","u":"https://www.tesla.com/en_GB/findus/location/supercharger/whangareisupercharger"}];
+  const SC_SEED = {'Auckland South': [-36.99, 174.80], 'Blenheim': [-41.51, 173.96], 'Botany': [-36.93, 174.91], 'Bulls': [-40.17, 175.38], 'Christchurch': [-43.53, 172.64],
+    'Dunedin': [-45.88, 170.50], 'Epsom': [-36.89, 174.78], 'Hamilton': [-37.74, 175.20], 'Hastings': [-39.65, 176.80], 'Hornby': [-43.54, 172.52], 'Kaikoura': [-42.40, 173.68],
+    'Mangaweka': [-39.81, 175.79], 'Nelson': [-41.29, 173.25], 'New Plymouth': [-39.06, 174.07], 'Omarama': [-44.49, 169.97], 'Palmerston North': [-40.36, 175.61],
+    'Paraparaumu': [-40.91, 175.00], 'Queenstown': [-45.02, 168.74], 'Rainbow Point': [-38.70, 176.08], 'Rotorua': [-38.14, 176.25], 'Ruakura': [-37.78, 175.32],
+    'Sylvia Park': [-36.92, 174.84], 'Taihape': [-39.68, 175.80], 'Taupo': [-38.69, 176.07], 'Glenfield': [-36.78, 174.72], 'Timaru': [-44.37, 171.23], 'Waipapa': [-35.28, 173.89],
+    'Waitomo': [-38.26, 175.10], 'Johnsonville': [-41.22, 174.80], 'Westgate': [-36.81, 174.60], 'Whakatane': [-37.96, 177.00], 'Whangarei': [-35.74, 174.33]};
+  NZ_SC.forEach(d => { d.s = 1; d.g = SC_SEED[d.n]; });
+  const geoOf = d => destGeo[destKey(d)] || (d.g ? {lat: d.g[0], lng: d.g[1], approx: true} : null);
+  const DKEY = 'wanderlist.dest.v1';
+  let destGeo = {};
+  try { destGeo = JSON.parse(localStorage.getItem(DKEY)) || {}; } catch(e) {}
+  const inNZ = r => r.lat > -48.5 && r.lat < -33.5 && r.lng > 165.5 && r.lng < 179.5;
+  const destKey = d => (d.s ? 'S|' : '') + d.n + '|' + d.a;
+  const builtinList = type => type === 'dest' ? NZ_DEST : type === 'sc' ? NZ_SC : null;
+  const destPending = list => list.filter(d => !destGeo[destKey(d)]);
+  async function locateDest(list){
+    const todo = destPending(list), st = $('chgStatus'); let done = 0, fail = 0;
+    for (const d of todo){
+      const parts = d.a.split(',').map(x => x.trim()), loc = d.s ? d.n : (parts.length > 1 ? parts[parts.length - 2] : parts[0]);
+      const addr = d.a.replace(/\bNZ\s+/g, '') + ', New Zealand';
+      const qs = d.s
+        ? [[addr, false], ['Tesla Supercharger, ' + loc + ', New Zealand', false], [loc + ', New Zealand', true]]
+        : [[addr, false], [d.n + ', ' + loc + ', New Zealand', false], [loc + ', New Zealand', true]];
+      let hit = null;
+      for (const [q, approx] of qs){
+        try { const r = (await geocode(q)).find(inNZ); if (r){ hit = {lat: r.lat, lng: r.lng, approx}; break; } } catch(e) {}
+        await new Promise(r => setTimeout(r, 1100));   // be polite to the free geocoder
+      }
+      if (hit) destGeo[destKey(d)] = hit; else fail++;
+      done++; st.textContent = `Locating addresses… ${done}/${todo.length}`;
+      try { localStorage.setItem(DKEY, JSON.stringify(destGeo)); } catch(e) {}
+    }
+    toast(fail ? `Located ${todo.length - fail} of ${todo.length} (${fail} couldn’t be found)` : 'All addresses located');
+    if (builtinList($('chgType').value) === list) searchChargers();
+  }
+  let chg = {center: null, raw: [], status: '', key: ''};
+  const chgCache = new Map();
+  async function fetchChargersNear(c, radiusKm, type){
+    const tesla = ['["socket:tesla_supercharger"]', '["brand"~"Tesla",i]', '["operator"~"Tesla",i]', '["network"~"Tesla",i]', '["name"~"Supercharger",i]'];
+    const dc = ['["socket:type2_combo"]', '["socket:ccs"]', '["socket:chademo"]'];
+    const around = `(around:${radiusKm * 1000},${c.lat.toFixed(5)},${c.lng.toFixed(5)})`;
+    const q = type === 'all'
+      ? `[out:json][timeout:40];nwr["amenity"="charging_station"]${around};out center tags 500;`
+      : `[out:json][timeout:40];nwr["amenity"="charging_station"]${around}->.c;(${tesla.concat(type === 'dc' ? dc : []).map(f => `nwr.c${f};`).join('')});out center tags 500;`;
+    const errors = [];
+    for (const url of OVERPASS){
+      try {
+        const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'data=' + encodeURIComponent(q)});
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.remark && /error|timed out|memory/i.test(data.remark)) throw new Error(data.remark);
+        return (data.elements || []).map(parseCharger).filter(Boolean);
+      } catch(e) { errors.push(e.message); }
+    }
+    throw new Error(errors.join(' | '));
+  }
+  async function searchChargers(c){
+    if (c) chg.center = {name: c.name, lat: +c.lat, lng: +c.lng};
+    if (!chg.center) return;
+    const type = $('chgType').value, rad = +$('chgRad').value;
+    if (builtinList(type)){
+      const list = builtinList(type), isSc = type === 'sc';
+      chg.key = type; chg.status = 'ok';
+      chg.raw = list.map((d, i) => ({d, i})).filter(x => geoOf(x.d)).map(({d, i}) => ({
+        id: (isSc ? 's' : 'd') + i, lat: geoOf(d).lat, lng: geoOf(d).lng, approx: !!geoOf(d).approx,
+        kind: isSc ? 'tesla' : 'dest', builtin: true, kw: 0, stalls: 0, name: isSc ? 'Supercharger · ' + d.n : d.n, op: d.a, phone: d.p || '', url: d.u || ''}));
+      return renderChargers(true);
+    }
+    const key = [chg.center.lat.toFixed(4), chg.center.lng.toFixed(4), type, rad].join('|');
+    chg.key = key;
+    if (chgCache.has(key)){ chg.raw = chgCache.get(key); chg.status = 'ok'; return renderChargers(true); }
+    chg.status = 'loading'; chg.raw = []; renderChargers(false);
+    try {
+      const raw = await fetchChargersNear(chg.center, rad, type);
+      chgCache.set(key, raw);
+      if (chg.key !== key) return;              // user changed the search meanwhile
+      chg.raw = raw; chg.status = 'ok'; renderChargers(true);
+    } catch(e){
+      if (chg.key !== key) return;
+      chg.status = 'error: ' + e.message; renderChargers(false);
+    }
+  }
+  function chgClass(c){ return c.kind === 'dest' ? 'dest' : c.kind === 'tesla' ? 'tesla' : ((c.kw || 0) >= 50 ? 'fast' : ''); }
+  function chgList(){
+    const minKw = +$('chgKw').value, rad = +$('chgRad').value;
+    return chg.raw.map(c => Object.assign({}, c, {d: hav(chg.center, c)}))
+      .filter(c => c.d <= rad + 0.5 && (!minKw || !c.kw || c.kw >= minKw))
+      .sort((a, b) => a.d - b.d);
+  }
+  function renderChargers(fit){
+    chgLayer.clearLayers();
+    const st = $('chgStatus'), box = $('chgList');
+    if (!chg.center){ st.textContent = 'Search for a place, or use the current map view, to see chargers nearby.'; box.innerHTML = ''; return; }
+    L.circleMarker([chg.center.lat, chg.center.lng], {radius: 7, color: '#1f2328', weight: 2, fillColor: '#fff', fillOpacity: 1}).bindTooltip('Search centre: ' + esc(chg.center.name)).addTo(chgLayer);
+    if (chg.status === 'loading'){ st.textContent = `Searching near ${chg.center.name}…`; box.innerHTML = ''; return; }
+    if (chg.status.startsWith('error')){
+      st.innerHTML = `⚠️ Couldn’t load chargers (${esc(chg.status.slice(7))}). The free OpenStreetMap server may be busy — <a href="#" id="chgRetry">try again</a>.`;
+      box.innerHTML = ''; return;
+    }
+    const list = chgList(), shown = list.slice(0, 60), bl = builtinList($('chgType').value), pend = bl ? destPending(bl).length : 0;
+    const seeded = !!(bl && bl.some(d => d.g));
+    if (pend && !seeded){ st.innerHTML = `${pend} of ${bl.length} ${$('chgType').value === 'sc' ? 'Superchargers' : 'destination chargers'} still need coordinates. <button type="button" id="chgLocate">📍 Locate them (one-time, ~${Math.ceil(pend * 1.3 / 60)} min)</button>`; }
+    else st.textContent = list.length ? `${list.length} charger${list.length === 1 ? '' : 's'} near ${chg.center.name}` + (list.length > shown.length ? ` · showing the nearest ${shown.length}` : '') : `No chargers found near ${chg.center.name}. Try a wider radius or a different type.`;
+    if (pend && seeded) st.innerHTML = esc(st.textContent) + ` · positions are approximate (town level). <button type="button" id="chgLocate">📍 Get exact positions (one-time, ~${Math.ceil(pend * 1.3 / 60)} min)</button>`;
+    shown.forEach(c => {
+      const col = c.kind === 'dest' ? '#7c3aed' : c.kind === 'tesla' ? '#dc2626' : (c.kw >= 50 ? '#2563eb' : '#6b7280');
+      L.circleMarker([c.lat, c.lng], {radius: 8, color: '#fff', weight: 2, fillColor: col, fillOpacity: 1})
+        .bindTooltip(esc(c.name) + (c.kw ? ' · ' + Math.round(c.kw) + ' kW' : '')).on('click', () => {
+          const el = box.querySelector(`[data-cid="${c.id}"]`); if (el){ el.scrollIntoView({block: 'nearest'}); el.style.background = '#fff4d6'; setTimeout(() => el.style.background = '', 1200); }
+        }).addTo(chgLayer);
+    });
+    box.innerHTML = shown.map(c => {
+      const bits = c.builtin ? [fmtDist(c.d) + ' away' + (c.approx ? ' (approx. position)' : ''), c.kind === 'dest' ? 'destination charger – slow, for overnight' : 'Tesla Supercharger', c.op, c.phone].filter(Boolean) : [fmtDist(c.d) + ' away', c.kw ? Math.round(c.kw) + ' kW' : 'power unknown', c.stalls ? c.stalls + ' stalls' : null, c.op && c.kind !== 'tesla' ? c.op : null].filter(Boolean);
+      return `<div class="chgrow ${chgClass(c)}" data-cid="${c.id}" data-lat="${c.lat}" data-lng="${c.lng}">
+        <span class="ic">⚡</span>
+        <div class="nb"><b title="${esc(c.name)}">${esc(c.name)}</b><small>${esc(bits.join(' · '))}</small>
+          <div class="acts"><button type="button" data-ca="trip" class="primary">＋ Add to itinerary…</button><a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}">Google Maps ↗</a>${c.url ? `<a target="_blank" rel="noopener" href="${esc(c.url)}">Tesla page ↗</a>` : ''}</div><div class="addbox"></div></div></div>`;
+    }).join('');
+    if (fit){
+      const pts = [[chg.center.lat, chg.center.lng]].concat(shown.slice(0, 25).map(c => [c.lat, c.lng]));
+      map.fitBounds(L.latLngBounds(pts), {padding: [50, 50], maxZoom: 13});
+    }
+  }
+  // Pick exactly where a charger goes in the itinerary: which day, where in that day, and as what.
+  let chgDayPref = null, chgFillPref = null;
+  function posOptions(day){
+    const o = [['end', 'At the end of the day'], ['start', 'At the start of the day']];
+    trip.stops.forEach((st, i) => {
+      if ((st.day || 1) !== day) return;
+      const k = KINDS[kindOf(st)], p = st.blank ? null : stopPlace(st);
+      o.push(['after:' + i, 'After: ' + k.icon + ' ' + (p ? p.name : (kindOf(st) === 'note' ? 'Note' : k.label + ' (no place yet)'))]);
+    });
+    trip.stops.forEach((st, i) => { if ((st.day || 1) === day && st.blank && kindOf(st) !== 'note') o.push(['fill:' + i, 'Use it for: ' + KINDS[kindOf(st)].icon + ' ' + KINDS[kindOf(st)].label + ' (no place yet)']); });
+    return o;
+  }
+  function fillPos(box, day){
+    box.querySelector('[data-f=pos]').innerHTML = posOptions(day).map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join('');
+  }
+  function openAddBox(row){
+    const box = row.querySelector('.addbox'); if (box.innerHTML){ box.innerHTML = ''; return; }
+    const nDays = trip.nDays || 1, dflt = chgDayPref && chgDayPref <= nDays ? chgDayPref : nDays;
+    box.innerHTML = `<div class="row tight" style="margin-top:8px">
+      <select data-f="day">${Array.from({length: nDays}, (_, x) => `<option value="${x + 1}" ${x + 1 === dflt ? 'selected' : ''}>Day ${x + 1}</option>`).join('')}<option value="new">＋ New day</option></select>
+      <select data-f="pos" style="flex:1;min-width:0"></select>
+      <select data-f="kind"><option value="charge">🔌 Charging stop</option><option value="sleep">🛏️ Sleep here</option></select>
+      <button type="button" class="primary" data-ca="confirm">Add</button></div>`;
+    fillPos(box, dflt);
+    if (chgFillPref){ const ix = trip.stops.indexOf(chgFillPref); if (ix >= 0 && (chgFillPref.day || 1) === dflt && chgFillPref.blank) box.querySelector('[data-f=pos]').value = 'fill:' + ix; }
+  }
+  function addChargerToTrip(c, box){
+    const dv = box.querySelector('[data-f=day]').value, kindSel = box.querySelector('[data-f=kind]').value, posV = box.querySelector('[data-f=pos]').value;
+    const day = dv === 'new' ? (trip.nDays || 1) + 1 : +dv;
+    const place = {name: c.name, address: c.op || '', lat: c.lat, lng: c.lng};
+    const asSleep = kindSel === 'sleep';
+    const pos = dv === 'new' ? 'end' : posV;
+    if (pos.startsWith('fill:')){
+      const st = trip.stops[+pos.slice(5)]; if (!st) return;
+      delete st.blank; delete st.pid; delete st.place; st.place = place; st.charge = true; chgFillPref = null;
+      render(); refreshRoute(true); return toast(`${KINDS[kindOf(st)].label} set to ${c.name}`);
+    }
+    const e = Object.assign({place}, stopDefaults(asSleep ? 'sleep' : 'charge'), {charge: true, day});
+    trip.nDays = Math.max(trip.nDays || 1, day);
+    let idx = pos === 'end' ? insertIndexForDay(day) : pos === 'start' ? insertIndexForDay(day - 1) : +pos.slice(6) + 1;
+    trip.stops.splice(idx, 0, e);
+    normalizeStops(); render(); refreshRoute(true);
+    toast(`Added “${c.name}” to Day ${day} as a ${asSleep ? 'sleep + charge' : 'charging'} stop`);
+  }
+  $('chgPicker').innerHTML = pickerHTML('chg', true);
+  wirePicker('chg', pl => searchChargers(pl), null, 'Search here');
+  $('chgView').onclick = () => { const c = map.getCenter(); searchChargers({name: 'the map view', lat: c.lat, lng: c.lng}); };
+  $('chgHome').onclick = () => { if (!home) return toast('Set a home address in the Trip tab first'); searchChargers({name: home.name || 'home', lat: home.lat, lng: home.lng}); };
+  ['chgType', 'chgRad'].forEach(id => $(id).addEventListener('change', () => searchChargers()));
+  $('chgKw').addEventListener('change', () => { if (chg.status === 'ok') renderChargers(false); });
+  $('chgStatus').addEventListener('click', e => {
+    if (e.target.id === 'chgLocate'){ e.target.disabled = true; locateDest(builtinList($('chgType').value)); return; } if (e.target.id === 'chgRetry'){ e.preventDefault(); chgCache.delete(chg.key); searchChargers(); } });
+  $('chgList').addEventListener('change', e => {
+    if (e.target.dataset.f === 'day'){ const box = e.target.closest('.addbox'); const v = e.target.value; fillPos(box, v === 'new' ? 0 : +v); if (v === 'new') box.querySelector('[data-f=pos]').innerHTML = '<option value="end">New day</option>'; }
+  });
+  $('chgList').addEventListener('click', e => {
+    const row = e.target.closest('.chgrow'); if (!row) return;
+    const c = chg.raw.find(x => x.id === row.dataset.cid);
+    if (e.target.closest('[data-ca=trip]')){ openAddBox(row); return; }
+    if (e.target.closest('[data-ca=confirm]')){ if (c) addChargerToTrip(c, row.querySelector('.addbox')); return; }
+    if (e.target.closest('.addbox')) return;
+    if (e.target.closest('a')) return;
+    map.setView([+row.dataset.lat, +row.dataset.lng], Math.max(map.getZoom(), 15));
+  });
+  renderChargers(false);
+
+  function showTab(t){
+    $('paneWish').hidden = t !== 'wish'; $('paneTrip').hidden = t !== 'trip'; $('paneChg').hidden = t !== 'chg';
+    if (t === 'chg') chgLayer.addTo(map); else map.removeLayer(chgLayer);
+    document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+    if (t === 'trip'){ renderTrip(); if (legsReady(tripNodes())) fitTrip(); }
+  }
+  document.querySelector('.tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab);
+  });
+
+  // ---------- export / import ----------
+  $('export').onclick = () => {
+    const photos = {}; photoRefs().forEach(id => { if (photoCache.has(id)) photos[id] = photoCache.get(id); });
+    const blob = new Blob([JSON.stringify({version: 4, places, trip, home, car, photos}, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `wanderlist-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  $('import').onclick = () => $('file').click();
+  $('file').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      const list = Array.isArray(data) ? data : data.places;
+      if (!Array.isArray(list)) throw new Error('bad format');
+      let added = 0; const idMap = {};
+      list.forEach(p => {
+        if (typeof p.lat !== 'number' || typeof p.lng !== 'number' || !p.name) return;
+        const dupe = places.find(x => Math.abs(x.lat - p.lat) < 1e-5 && Math.abs(x.lng - p.lng) < 1e-5);
+        if (dupe){ if (p.id) idMap[p.id] = dupe.id; return; }
+        const id = (p.id && !placeById(p.id)) ? p.id : uid();
+        if (p.id) idMap[p.id] = id;
+        places.push({id, name: String(p.name), address: String(p.address || ''), lat: p.lat, lng: p.lng,
+          status: STATUS[p.status] ? p.status : 'want', note: String(p.note || ''), added: p.added || Date.now(),
+          photos: Array.isArray(p.photos) ? p.photos.filter(x => typeof x === 'string') : []});
+        added++;
+      });
+      save();
+      if (!Array.isArray(data) && data.photos && typeof data.photos === 'object') Object.entries(data.photos).forEach(([id, u]) => { if (typeof u === 'string' && u.startsWith('data:image/') && !photoCache.has(id)) photoPut(id, u); });
+      if (!Array.isArray(data)){
+        if (data.home && !home && typeof data.home.lat === 'number'){ home = data.home; saveHome(); drawHome(); }
+        if (data.car && !carSet() && data.car.rangeKm > 0){ car = Object.assign(car, data.car); saveCar(); }
+      }
+      if (!Array.isArray(data) && data.trip && !trip.start && !trip.stops.length){
+        const t = data.trip;
+        trip.start = t.start || null; trip.end = t.end || (t.round ? 'start' : 'last'); trip.units = t.units === 'mi' ? 'mi' : 'km';
+        trip.startPct = t.startPct ?? trip.startPct;
+        if (t.date) trip.date = t.date; if (t.time) trip.time = t.time;
+        trip.stops = (t.stops || []).map(s => Object.assign(s.place ? {place: s.place} : {pid: idMap[s.pid] || s.pid}, {stay: s.stay ?? 2, unit: s.unit === 'n' ? 'n' : 'h', charge: !!s.charge, kind: s.kind, day: s.day, at: s.at || '', blank: !!s.blank, text: s.text || '', memo: s.memo || '', photos: Array.isArray(s.photos) ? s.photos.filter(x => typeof x === 'string') : [], cost: s.cost == null ? '' : s.cost})).filter(s => s.blank || stopPlace(s));
+        trip.nDays = t.nDays || 1; trip.dayStart = t.dayStart || {}; trip.cur = t.cur || '$'; trip.people = t.people || 1; trip.title = t.title || ''; normalizeStops();
+        initTripInputs();
+      }
+      syncCarUI();
+      render(); fitAll(); refreshRoute(false);
+      toast(`Imported ${added} place${added===1?'':'s'}`);
+    } catch(err) { toast('That file isn’t a valid Wanderlist export'); }
+    e.target.value = '';
+  };
+
+  // ---------- toast ----------
+  let toastTimer = null, undoFn = null;
+  function toast(msg, undo){
+    $('toastMsg').textContent = msg; undoFn = undo || null;
+    $('toastUndo').style.display = undo ? '' : 'none';
+    $('toast').style.display = 'flex';
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').style.display = 'none', 5000);
+  }
+  $('toastUndo').onclick = () => { if (undoFn) undoFn(); $('toast').style.display = 'none'; };
+
+  // ---------- go ----------
+  function initTripInputs(){
+    $('tDate').value = trip.date; $('tTime').value = trip.time;
+    $('tUnits').value = trip.units; $('alsoWish').checked = !!trip.alsoWish;
+    $('costCur').value = trip.cur || '$'; $('costPeople').value = trip.people || 1; $('shTitle').value = trip.title || '';
+  }
+  $('startPicker').innerHTML = pickerHTML('start');
+  $('homePicker').innerHTML = pickerHTML('home');
+  wirePicker('start', setStart, 'My location');
+  wirePicker('home', setHome, null);
+  $('stopPicker').innerHTML = pickerHTML('stop', true);
+  wirePicker('stop', addStopFromPlace, null, 'Add');
+  initTripInputs(); initCarUI(); drawHome();
+  $('homeDetails').open = !home;
+  render(); fitAll();
+  refreshRoute(false);
+}
+</script>
+<script>
+// Load the Leaflet map library, trying several CDNs in turn.
+(function(){
+  var sources = [
+    ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'],
+    ['https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js', 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'],
+    ['https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js', 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css']
+  ];
+  function fail(){
+    document.getElementById('map').innerHTML =
+      '<div style="padding:40px;max-width:480px;margin:auto;font:15px/1.5 system-ui">' +
+      '<h2>Couldn’t load the map library</h2>' +
+      '<p>This page needs internet access to load Leaflet from a CDN (unpkg, jsDelivr and cdnjs all failed).</p>' +
+      '<p>Check your connection, and try disabling any ad/content blocker or VPN for this page, then reload.</p></div>';
+  }
+  function tryNext(i){
+    if (i >= sources.length) return fail();
+    var css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = sources[i][1];
+    document.head.appendChild(css);
+    var s = document.createElement('script');
+    s.src = sources[i][0];
+    s.onload = function(){ if (window.L) startApp(); else tryNext(i + 1); };
+    s.onerror = function(){ tryNext(i + 1); };
+    document.head.appendChild(s);
+  }
+  tryNext(0);
+})();
+</script>
+</body>
+</html>
